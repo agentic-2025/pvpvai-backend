@@ -20,7 +20,7 @@ const signedRequestSchema = z
     timestamp: z
       .number()
       .int()
-      .min(Date.now() - SIGNATURE_WINDOW_MS) //Reject records that wouldn't fall in the signature window in basic validation
+      .min(Date.now() - SIGNATURE_WINDOW_MS), //Reject records that wouldn't fall in the signature window in basic validation
   })
   .passthrough();
 
@@ -47,9 +47,6 @@ export const signatureVerificationPlugin = async (
 
     const body = signedRequestSchema.parse(request.body);
     const now = Date.now(); // UTC timestamp
-    console.log('Signature verification - Server time:', now);
-    console.log('Signature verification - Request time:', body.timestamp);
-    console.log('Signature verification - Time difference:', now - body.timestamp);
 
     if (body.timestamp > now) {
       return reply.code(401).send({
