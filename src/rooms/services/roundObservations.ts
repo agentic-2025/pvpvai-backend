@@ -2,7 +2,6 @@ import { supabase } from '../../config';
 import { RoomOperationResult } from '../types/roomTypes';
 import { Observation, ObservationCreateInput, RoundObservation } from '../types/observationTypes';
 import { hashMessage } from '@coinbase/coinbase-sdk';
-import { Database } from '../../types/database.types';
 
 export class RoundObservationsService {
   async createObservation(data: ObservationCreateInput): Promise<RoomOperationResult<RoundObservation>> {
