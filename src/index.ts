@@ -1,12 +1,15 @@
 import websocket from '@fastify/websocket';
 import fastify from 'fastify';
 import agentsRoutes from './agents';
+import { wsOps } from './config';
+import { signatureVerificationMiddleware } from './middleware/signatureVerification';
 import roomsRoutes from './rooms';
 import { WSMessageInput } from './types/ws';
-import { wsOps } from './config';
 import zodSchemaPlugin from './plugins/zodSchema';
 
-const server = fastify();
+const server = fastify({
+  logger: true,
+});
 
 // Register Zod validation
 server.register(zodSchemaPlugin);
@@ -14,8 +17,21 @@ server.register(zodSchemaPlugin);
 // Register WebSocket support
 server.register(websocket);
 
+// Register the middleware
+server.register(signatureVerificationMiddleware);
+
 server.register(agentsRoutes, { prefix: '/agents' });
 server.register(roomsRoutes, { prefix: '/rooms' });
+
+// Add this route after other route registrations but before the WebSocket registration
+server.post('/protected-hello', async (request, reply) => {
+  const body = request.body as any;
+  return {
+    message: 'Hello, verified user!',
+    account: body.account,
+    data: body.data, // Any additional data passed
+  };
+});
 
 // Regular HTTP routes
 server.get('/', async (request, reply) => {

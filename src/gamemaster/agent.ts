@@ -162,6 +162,7 @@ async function runAutonomousMode(agent: any, config: any, interval = 10) {
           <json>
           {
             "timestamp": {{current timestamp}},
+            "gameMaster": {{gamemaster wallet address}}
             "walletBalances": {
             {{agentId}}: {
                 "nativeBalance": {{nativeBalance}},
