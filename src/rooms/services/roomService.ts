@@ -1,32 +1,36 @@
-// src/rooms/services/roomService.ts
 import { supabase } from '../../config';
-import { RoomOperationResult, DBRoom, DBRoomInsert, DBRoomAgent } from '../types/roomTypes';
+import { RoomOperationResult } from '../types/roomTypes';
+import { Database } from '../../types/database.types';
 
 export class RoomService {
-  async createRoom(roomData: DBRoomInsert): Promise<RoomOperationResult<DBRoom>> {
+  async isAgentInRoom(roomId: number, agentId: number): Promise<RoomOperationResult<boolean>> {
     try {
-      const { data: room, error } = await supabase
-        .from('rooms')
-        .insert(roomData)
-        .select()
+      const { data, error } = await supabase
+        .from('room_agents')
+        .select('*')
+        .eq('room_id', roomId)
+        .eq('agent_id', agentId)
         .single();
 
       if (error) {
+        if (error.code === 'PGRST116') {  // Not found error
+          return { success: true, data: false };
+        }
         return { success: false, error: error.message };
       }
 
-      return { success: true, data: room };
+      return { success: true, data: Boolean(data) };
     } catch (err) {
-      console.error('Error in createRoom:', err);
-      return { success: false, error: 'Internal server error' };
+      console.error('Error checking agent in room:', err);
+      return { success: false, error: 'Failed to check agent in room' };
     }
   }
 
-  async findRoomById(roomId: number): Promise<RoomOperationResult<DBRoom>> {
+  async findRoomById(roomId: number): Promise<RoomOperationResult<Database['public']['Tables']['rooms']['Row']>> {
     try {
-      const { data: room, error } = await supabase
+      const { data, error } = await supabase
         .from('rooms')
-        .select()
+        .select('*')
         .eq('id', roomId)
         .single();
 
@@ -34,22 +38,41 @@ export class RoomService {
         return { success: false, error: error.message };
       }
 
-      return { success: true, data: room };
+      return { success: true, data };
     } catch (err) {
-      console.error('Error in findRoomById:', err);
-      return { success: false, error: 'Internal server error' };
+      console.error('Error finding room:', err);
+      return { success: false, error: 'Failed to find room' };
     }
   }
 
-  async addAgentToRoom(roomId: number, agentId: number): Promise<RoomOperationResult<DBRoomAgent>> {
+  async createRoom(roomData: Database['public']['Tables']['rooms']['Insert']): Promise<RoomOperationResult<Database['public']['Tables']['rooms']['Row']>> {
     try {
-      const { data: roomAgent, error } = await supabase
+      const { data, error } = await supabase
+        .from('rooms')
+        .insert([roomData])
+        .select()
+        .single();
+
+      if (error) {
+        return { success: false, error: error.message };
+      }
+
+      return { success: true, data };
+    } catch (err) {
+      console.error('Error creating room:', err);
+      return { success: false, error: 'Failed to create room' };
+    }
+  }
+
+  async addAgentToRoom(roomId: number, agentId: number): Promise<RoomOperationResult<Database['public']['Tables']['room_agents']['Row']>> {
+    try {
+      const { data, error } = await supabase
         .from('room_agents')
         .upsert({
           room_id: roomId,
-          agent_id: agentId,
+          agent_id: agentId
         }, {
-          onConflict: 'room_id,agent_id',
+          onConflict: 'room_id,agent_id'
         })
         .select()
         .single();
@@ -58,24 +81,24 @@ export class RoomService {
         return { success: false, error: error.message };
       }
 
-      return { success: true, data: roomAgent };
+      return { success: true, data };
     } catch (err) {
-      console.error('Error in addAgentToRoom:', err);
-      return { success: false, error: 'Internal server error' };
+      console.error('Error adding agent to room:', err);
+      return { success: false, error: 'Failed to add agent to room' };
     }
   }
 
-  async bulkAddAgentsToRoom(roomId: number, agentIds: number[]): Promise<RoomOperationResult<DBRoomAgent[]>> {
+  async bulkAddAgentsToRoom(roomId: number, agentIds: number[]): Promise<RoomOperationResult<Database['public']['Tables']['room_agents']['Row'][]>> {
     try {
       const roomAgentsData = agentIds.map(agentId => ({
         room_id: roomId,
-        agent_id: agentId,
+        agent_id: agentId
       }));
 
-      const { data: roomAgents, error } = await supabase
+      const { data, error } = await supabase
         .from('room_agents')
         .upsert(roomAgentsData, {
-          onConflict: 'room_id,agent_id',
+          onConflict: 'room_id,agent_id'
         })
         .select();
 
@@ -83,48 +106,10 @@ export class RoomService {
         return { success: false, error: error.message };
       }
 
-      return { success: true, data: roomAgents };
+      return { success: true, data };
     } catch (err) {
-      console.error('Error in bulkAddAgentsToRoom:', err);
-      return { success: false, error: 'Internal server error' };
-    }
-  }
-
-  async getRoomAgents(roomId: number): Promise<RoomOperationResult<DBRoomAgent[]>> {
-    try {
-      const { data: roomAgents, error } = await supabase
-        .from('room_agents')
-        .select('*')
-        .eq('room_id', roomId);
-
-      if (error) {
-        return { success: false, error: error.message };
-      }
-
-      return { success: true, data: roomAgents };
-    } catch (err) {
-      console.error('Error in getRoomAgents:', err);
-      return { success: false, error: 'Internal server error' };
-    }
-  }
-
-  async updateRoom(roomId: number, updateData: Partial<DBRoomInsert>): Promise<RoomOperationResult<DBRoom>> {
-    try {
-      const { data: room, error } = await supabase
-        .from('rooms')
-        .update(updateData)
-        .eq('id', roomId)
-        .select()
-        .single();
-
-      if (error) {
-        return { success: false, error: error.message };
-      }
-
-      return { success: true, data: room };
-    } catch (err) {
-      console.error('Error in updateRoom:', err);
-      return { success: false, error: 'Internal server error' };
+      console.error('Error bulk adding agents:', err);
+      return { success: false, error: 'Failed to bulk add agents' };
     }
   }
 }

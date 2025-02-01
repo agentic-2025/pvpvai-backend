@@ -1,23 +1,37 @@
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifySchema, FastifySchemaCompiler } from 'fastify';
 import fastifyPlugin from 'fastify-plugin';
-import { TypeBoxTypeProvider } from '@fastify/type-provider-json-schema-to-ts';
+import { ZodError, ZodSchema, z } from 'zod';
+
+type ZodSchemaCompiler = FastifySchemaCompiler<FastifySchema> & {
+  schema: ZodSchema;
+};
 
 async function zodSchemaPlugin(server: FastifyInstance) {
-  // Add schema compiler for Zod schemas
-  server.setValidatorCompiler(({ schema }) => {
-    return (data) => {
-      try {
-        // Assume schema is a Zod schema
-        const result = schema.safeParse(data);
-        return result.success ? { value: result.data } : { error: result.error };
-      } catch (error) {
-        return { error };
+  server.setValidatorCompiler(({ schema }: { schema: FastifySchema }) => {
+    return (data: unknown) => {
+      if (schema instanceof z.ZodType) {
+        try {
+          const result = schema.safeParse(data);
+          return result.success
+            ? { value: result.data }
+            : { error: new Error(result.error.message) };
+        } catch (err) {
+          return { error: err instanceof Error ? err : new Error('Validation failed') };
+        }
       }
+      // Handle non-Zod schemas (fallback)
+      return { value: data };
     };
   });
 
-  // Set error handler for validation errors
   server.setErrorHandler((error, request, reply) => {
+    if (error instanceof ZodError) {
+      reply.status(400).send({
+        error: 'Validation error',
+        details: error.issues
+      });
+      return;
+    }
     if (error.validation) {
       reply.status(400).send({
         error: 'Validation error',
