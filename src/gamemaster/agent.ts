@@ -1,9 +1,9 @@
 import { CdpAgentkit } from '@coinbase/cdp-agentkit-core';
 import { CdpToolkit } from '@coinbase/cdp-langchain';
-import { ChatAnthropic } from '@langchain/anthropic';
 import { HumanMessage } from '@langchain/core/messages';
 import { MemorySaver } from '@langchain/langgraph';
 import { createReactAgent } from '@langchain/langgraph/prebuilt';
+import { ChatOpenAI } from '@langchain/openai';
 
 import * as dotenv from 'dotenv';
 import * as fs from 'fs';
@@ -12,10 +12,12 @@ import createWalletTool from './tools/createWallet';
 import getAgentWalletBalanceTool from './tools/getAgentWalletBalance';
 // import getCurrentTimeTool from './tools/getCurrentTime';
 import getLatestObservationTool from './tools/getLatestObservation';
-import getRoundDataTool from './tools/getRoundDataFromSupabase';
+import getRoundDataTool, { RoundData } from './tools/getRoundDataFromSupabase';
 import postObservationTool from './tools/postObservation';
 import signMessageTool from './tools/signMessage';
 // import webhookTool from './tools/webhook';
+import { getRoundDataFromSupabase } from './tools/getRoundDataFromSupabase';
+
 dotenv.config();
 
 /**
@@ -64,8 +66,8 @@ const WALLET_DATA_FILE = '../../wallet_data.txt';
 async function initializeAgent() {
   try {
     // Initialize LLM
-    const llm = new ChatAnthropic({
-      model: 'claude-3-5-sonnet-20241022',
+    const llm = new ChatOpenAI({
+      model: 'gpt-4o-mini',
     });
     let walletDataStr: string | null = null;
 
@@ -104,7 +106,10 @@ async function initializeAgent() {
 
     // Store buffered conversation history in memory
     const memory = new MemorySaver();
-    const agentConfig = { configurable: { thread_id: 'CDP AgentKit Chatbot Example!' } };
+    const agentConfig = {
+      agentkit,
+      configurable: { thread_id: 'CDP AgentKit Chatbot Example!' },
+    };
 
     // Create React Agent using the LLM and CDP AgentKit tools
     const agent = createReactAgent({
@@ -135,6 +140,62 @@ async function initializeAgent() {
   }
 }
 
+async function processRound(round: RoundData, agent: any, config: any, agentAddress: string) {
+  const processRoundThought = `
+  Process the following round and room data:
+  ${JSON.stringify(round, null, 2)}
+
+  For this round:
+  - If you encounter an agent in the round that does not have a wallet address, create a wallet for them using the create_wallet tool and provide the agentId and roomId
+  - Take note of which chain the room is on, which agents are in the round for the room and what their wallet addresses are, and what token the agents are trading on in the room.
+  - Fetch the latest observation data for the latest round of the room from Supabase
+  - Use pyth to fetch the current price of the ERC20 token in the room associated with the round in USD and the native token price in USD.
+  - Fetch the wallet balance of all agents in the round using the get_agent_wallet_balance tool
+  - Record the total value of each agent's wallet in USD and native.
+  - Prepare a JSON object with the following fields:
+    {
+      "observationType": "wallet-balances",
+      "account": ${agentAddress}
+      "content": {
+        "roomId": ${round.room_id},
+        "roundId": ${round.round_id}, 
+        "walletBalances": {
+          {{agentId}}: {
+            "nativeBalance": {{nativeBalance}},
+            "tokenBalance": {{room token balance}},
+            "nativeValue": {{value of nativeBalance + tokenBalance in native}},
+            "usdValue": {{value of nativeBalance + tokenBalance in USD}}
+            "percentChangeNative": {{percent change in native value from the previous observation, if observation data is empty, this is 0}}
+            "percentChangeUsd": {{percent change in usd value from the previous observation, if observation_data is empty, this is 0}}
+          },
+          "prices": {
+            "source": {{which tool you used to get the price data}},
+            "tokenPriceNative": {{token price in native, if needed this can be inferred from the token price in USD and the native price in USD}},
+            "tokenPriceUsd": {{token price in USD}},
+            "nativePriceUsd": {{native price in USD}}
+          }
+        }
+      }
+    }
+  - Create a signature of the JSON object using your own private key
+  - Send a POST request to ${process.env.BACKEND_URL || 'http://localhost:3000'}/observations with the JSON payload above
+  `;
+
+  const roundStream = await agent.stream(
+    { messages: [new HumanMessage(processRoundThought)] },
+    config
+  );
+
+  for await (const chunk of roundStream) {
+    if ('agent' in chunk) {
+      console.log(`Round ${round.round_id}:`, chunk.agent.messages[0].content);
+    } else if ('tools' in chunk) {
+      console.log(`Round ${round.round_id} tool:`, chunk.tools.messages[0].content);
+    }
+    console.log('-------------------');
+  }
+}
+
 /**
  * Run the agent autonomously with specified intervals
  *
@@ -146,64 +207,23 @@ async function initializeAgent() {
 async function runAutonomousMode(agent: any, config: any, interval = 10) {
   console.log('Starting autonomous mode...');
 
-  const KILL_ME_AT = 10; //TODO Remove me, adding this here in case I leave it running so my credits don't drain.
+  const KILL_ME_AT = 10;
   let currentCount = 0;
-  // eslint-disable-next-line no-constant-condition
   while (true) {
     try {
-      // - Search the r/cryptocurrency subreddit for any mentions of the token
-      // - Record the total change in price of the token since the round started
-      const thought = `
-      1. Fetch all currently active rounds for all Buy/Hold/Sell games with >30s left on the clock, and their associated room data from Supabase
-      2. For each open round:
-        - Take note of which chain the room is on, which agents are in the round for the room and what their wallet addresses are, and what token the agents are trading on in the room.
-        - Fetch the latest observation data for the latest round of the room from Supabase
-        - Use pyth to fetch the current price of the ERC20 token in the room associated with the round in USD and the native token price in USD.
-        - Fetch the wallet balance of all agents in the round
-        - Record the total value of each agent's wallet in USD and native.
-        - Prepare a JSON object with the following fields:
-          <json>
-          {
-            "observationType": "wallet-balances",
-            "account": {{gamemaster wallet address, this is your own wallet address}}
-            "content": {
-              "roomId": {{roomId}},
-              "roundId": {{roundId}}, 
-              "walletBalances": {
-                {{agentId}}: {
-                  "nativeBalance": {{nativeBalance}},
-                  "tokenBalance": {{room token balance}},
-                  "nativeValue": {{value of nativeBalance + tokenBalance in native}},
-                  "usdValue": {{value of nativeBalance + tokenBalance in USD}}
-                  "percentChangeNative": {{percent change in native value from the previous observation, if observation data is empty, this is 0}}
-                  "percentChangeUsd": {{percent change in usd value from the previous observation, if observation_data is empty, this is 0}}
-                },
-                "prices": {
-                  "source": {{which tool you used to get the price data}},
-                  "tokenPriceNative": {{token price in native, if needed this can be inferred from the token price in USD and the native price in USD}},
-                  "tokenPriceUsd": {{token price in USD}},
-                  "nativePriceUsd": {{native price in USD}}
-                }
-              }
-            }
-          }
-          </json>
-         - Create a signature of the JSON object using your own private key
-         - Send a POST request to ${process.env.BACKEND_URL || 'http://localhost:3000'}/observations with the JSON payload above
+      const roundsData = await getRoundDataFromSupabase();
 
-          If you are not able to get all the way through, explain all steps you took and where you stopped.
-        `;
-
-      const stream = await agent.stream({ messages: [new HumanMessage(thought)] }, config);
-
-      for await (const chunk of stream) {
-        if ('agent' in chunk) {
-          console.log(chunk.agent.messages[0].content);
-        } else if ('tools' in chunk) {
-          console.log(chunk.tools.messages[0].content);
-        }
-        console.log('-------------------');
+      if (!roundsData || !roundsData.length) {
+        console.log('No active rounds found, nothing to do');
+        continue;
       }
+
+      const agentAddress = (await config.agentkit.wallet.getDefaultAddress()).getId();
+      
+      // Process each round in parallel
+      await Promise.all(
+        roundsData.map((round) => processRound(round, agent, config, agentAddress))
+      );
 
       await new Promise((resolve) => setTimeout(resolve, interval * 10000));
     } catch (error) {
@@ -214,7 +234,9 @@ async function runAutonomousMode(agent: any, config: any, interval = 10) {
     }
     currentCount++;
     if (currentCount >= KILL_ME_AT) {
-      console.log("HIT MAX ROUNDS FOR AUTO MODE, REMOVE KILL_ME_AT IF YOU DON'T WANT TO AUTO EXIST")
+      console.log(
+        "HIT MAX ROUNDS FOR AUTO MODE, REMOVE KILL_ME_AT IF YOU DON'T WANT TO AUTO EXIST"
+      );
       process.exit(0);
     }
   }
@@ -274,6 +296,15 @@ async function runChatMode(agent: any, config: any) {
  * @returns Selected mode
  */
 async function chooseMode(): Promise<'chat' | 'auto'> {
+  // Check command line arguments first
+  const args = process.argv.slice(2);
+  if (args.includes('--chat')) {
+    return 'chat';
+  }
+  if (args.includes('--auto')) {
+    return 'auto'; 
+  }
+
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,

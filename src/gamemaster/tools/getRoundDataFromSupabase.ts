@@ -1,8 +1,7 @@
 import { CdpAgentkit } from '@coinbase/cdp-agentkit-core';
 import { CdpTool } from '@coinbase/cdp-langchain';
-import { createClient } from '@supabase/supabase-js';
 import { z } from 'zod';
-import { Database, Json } from '../../types/database.types';
+import { supabase } from '../../config';
 
 // Define the prompt for the get round data action
 const GET_ROUND_DATA_PROMPT = `
@@ -13,22 +12,28 @@ This tool fetches data about active rounds from the database, including:
 - Agent status (kicked or active)
 `;
 
-// Define the interfaces for type safety
-interface AgentData {
-  name: string;
-  wallet_address: string | null;
-  kicked: boolean;
-}
+// Define the schema for agent data
+const AgentDataSchema = z.object({
+  name: z.string(),
+  wallet_address: z.string().nullable(),
+  kicked: z.boolean(),
+});
 
-interface RoundData {
-  round_id: number;
-  room_id: number;
-  room_type: number;
-  chain_id: number;
-  chain_family: string;
-  agents: AgentData[];
-  round_config: Json;
-}
+// Define the schema for round data
+export const RoundDataSchema = z.object({
+  round_id: z.number(),
+  round_config: z.any(),
+  room_id: z.number(),
+  room_type: z.number(),
+  chain_id: z.number(),
+  chain_family: z.string(),
+  agents: z.array(AgentDataSchema),
+  token: z.string(),
+});
+
+// Export the types derived from the schemas
+export type AgentData = z.infer<typeof AgentDataSchema>;
+export type RoundData = z.infer<typeof RoundDataSchema>;
 
 // Define the input schema using Zod (empty since we don't need input parameters)
 const GetRoundDataInput = z.object({}).strip().describe('No input needed to fetch round data');
@@ -37,12 +42,7 @@ const GetRoundDataInput = z.object({}).strip().describe('No input needed to fetc
  * Fetches data about active rounds from Supabase
  * @returns Array of round data including room and agent information
  */
-async function getRoundDataFromSupabase(): Promise<RoundData[]> {
-  const supabase = createClient<Database>(
-    process.env.SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
-
+export async function getRoundDataFromSupabase(): Promise<RoundData[]> {
   const { data: roundsData, error } = await supabase
     .from('rounds')
     .select(
@@ -56,6 +56,7 @@ async function getRoundDataFromSupabase(): Promise<RoundData[]> {
         type_id,
         room_agents (
           wallet_address,
+          wallet_json,
           agents (
             id,
             display_name
@@ -77,7 +78,7 @@ async function getRoundDataFromSupabase(): Promise<RoundData[]> {
   if (!roundsData) {
     return [];
   }
-
+  console.log('roundsData', roundsData);
   return roundsData.map((round) => {
     const agentMap = new Map<number, AgentData>();
 

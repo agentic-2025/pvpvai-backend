@@ -14,7 +14,7 @@ export async function observationRoutes(server: FastifyInstance) {
     async (request, reply) => {
       try {
         const observation = request.body;
-        
+
         // Insert into round_observations table
         const { data, error } = await supabase
           .from('round_observations')
@@ -23,30 +23,29 @@ export async function observationRoutes(server: FastifyInstance) {
             observation_type: observation.observationType,
             content: observation,
             creator: observation.account,
-            created_at: new Date(observation.timestamp).toISOString()
+            created_at: new Date(observation.timestamp).toISOString(),
           })
           .select()
           .single();
 
         if (error) {
           console.error('Error inserting observation:', error);
-          return reply.status(500).send({ 
+          return reply.status(500).send({
             error: 'Failed to store observation',
-            details: error.message 
+            details: error.message,
           });
         }
 
         console.log('Stored observation:', data);
-        return reply.send({ 
+        return reply.send({
           message: 'Observation received and stored',
-          data 
+          data,
         });
-
       } catch (err) {
         console.error('Error processing observation:', err);
-        return reply.status(500).send({ 
+        return reply.status(500).send({
           error: 'Internal server error',
-          details: err instanceof Error ? err.message : 'Unknown error storing observation: ' + err
+          details: err instanceof Error ? err.message : 'Unknown error storing observation: ' + err,
         });
       }
     }

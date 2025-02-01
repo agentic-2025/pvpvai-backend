@@ -92,7 +92,7 @@ const postObservationTool = (agentkit: CdpAgentkit) => {
       name: 'post_observation',
       description: POST_OBSERVATION_PROMPT,
       argsSchema: PostObservationInput,
-      func: (args) => postObservation(agentkit.wallet, args),
+      func: postObservation,
     },
     agentkit
   );
