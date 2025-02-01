@@ -36,7 +36,7 @@ async function testExpiredSignature() {
       console.error('Request failed:', {
         status: response.status,
         statusText: response.statusText,
-        error: errorData
+        error: errorData,
       });
       return;
     }

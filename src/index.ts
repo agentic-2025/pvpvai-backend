@@ -2,11 +2,10 @@ import websocket from '@fastify/websocket';
 import fastify from 'fastify';
 import agentsRoutes from './agents';
 import { wsOps } from './config';
-import { signatureVerificationMiddleware } from './middleware/signatureVerification';
 // import roomsRoutes from './rooms';
+import { signatureVerificationPlugin } from './middleware/signatureVerification';
 import zodSchemaPlugin from './plugins/zodSchema';
 import { WSMessageInput } from './types/ws';
-import { signatureVerificationPlugin } from './middleware/signatureVerification';
 
 const server = fastify({
   logger: true,
@@ -17,7 +16,6 @@ server.register(zodSchemaPlugin);
 
 // Register WebSocket support
 server.register(websocket);
-
 
 server.register(agentsRoutes, { prefix: '/agents' });
 // server.register(roomsRoutes, { prefix: '/rooms' });
@@ -31,9 +29,9 @@ server.post(
   async (request, reply) => {
     const body = request.body as any;
     return {
-      message: "Hello, verified user!",
+      message: 'Hello, verified user!',
       account: body.account,
-      data: body.data
+      data: body.data,
     };
   }
 );
