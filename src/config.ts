@@ -13,3 +13,4 @@ if (!supabaseUrl || !supabaseKey) {
 export const wsOps = new WSOperations();
 export const supabase = createClient<Database>(supabaseUrl, supabaseKey);
 export const AGENT_ENDPOINT = process.env.AGENT_ENDPOINT || '';
+export const SIGNATURE_WINDOW_MS = process.env.SIGNATURE_WINDOW_MS ? parseInt(process.env.SIGNATURE_WINDOW_MS) : 5 * 1000; // 5 seconds in millisecons

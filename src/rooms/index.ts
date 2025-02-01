@@ -6,12 +6,12 @@ import { roundRoutes } from './routes/roundRoutes';
 export * from './types/roomTypes';
 // Export round types (renamed to avoid conflicts)
 export {
-  RoundDataDB as RoundData,
-  RoundParticipantDB as RoundParticipant,
-  RoundMessageDB as RoundMessage,
   GMActionDB as GMAction,
   RoundConfig,
+  RoundDataDB as RoundData,
+  RoundMessageDB as RoundMessage,
   BaseRoundOutcome as RoundOutcome,
+  RoundParticipantDB as RoundParticipant,
 } from './types/roundTypes';
 
 // Export controllers
@@ -30,10 +30,13 @@ export * from './utils/messageHandler';
 export * from './utils/pvpHandler';
 
 // Main routes registration
-export default async function registerRoomRoutes(server: FastifyInstance, options: FastifyServerOptions) {
+export default async function registerRoomRoutes(
+  server: FastifyInstance,
+  options: FastifyServerOptions
+) {
   // Register room routes
   await roomRoutes(server);
-  
+
   // Register round routes
   await roundRoutes(server);
 }
