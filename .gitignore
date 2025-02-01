@@ -46,3 +46,6 @@ dist-ssr
 out
 build
 .vscode
+
+# Wallet data
+wallets/*

@@ -6,17 +6,16 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[]
 
-
 export type Database = {
   public: {
     Tables: {
       agents: {
         Row: {
           character_card: string | null
-          color: string | null
+          color: string
           created_at: string
           creator_id: number
-          display_name: string | null
+          display_name: string
           endpoint: string
           eth_wallet_address: string | null
           id: number
@@ -30,10 +29,10 @@ export type Database = {
         }
         Insert: {
           character_card?: string | null
-          color?: string | null
+          color: string
           created_at?: string
           creator_id: number
-          display_name?: string | null
+          display_name: string
           endpoint: string
           eth_wallet_address?: string | null
           id?: number
@@ -47,10 +46,10 @@ export type Database = {
         }
         Update: {
           character_card?: string | null
-          color?: string | null
+          color?: string
           created_at?: string
           creator_id?: number
-          display_name?: string | null
+          display_name?: string
           endpoint?: string
           eth_wallet_address?: string | null
           id?: number
@@ -124,6 +123,7 @@ export type Database = {
           id: number
           room_id: number
           updated_at: string
+          wallet_address: string | null
         }
         Insert: {
           agent_id: number
@@ -131,6 +131,7 @@ export type Database = {
           id?: number
           room_id: number
           updated_at?: string
+          wallet_address?: string | null
         }
         Update: {
           agent_id?: number
@@ -138,6 +139,7 @@ export type Database = {
           id?: number
           room_id?: number
           updated_at?: string
+          wallet_address?: string | null
         }
         Relationships: [
           {
@@ -186,6 +188,8 @@ export type Database = {
       rooms: {
         Row: {
           active: boolean
+          chain_family: string
+          chain_id: number
           color: string | null
           contract_address: string | null
           created_at: string
@@ -195,7 +199,6 @@ export type Database = {
           id: number
           image_url: string | null
           name: string
-          network: string
           pvp_action_log: Json | null
           room_config: Json | null
           round_ends_on: string | null
@@ -205,6 +208,8 @@ export type Database = {
         }
         Insert: {
           active?: boolean
+          chain_family: string
+          chain_id: number
           color?: string | null
           contract_address?: string | null
           created_at?: string
@@ -214,7 +219,6 @@ export type Database = {
           id?: number
           image_url?: string | null
           name: string
-          network: string
           pvp_action_log?: Json | null
           room_config?: Json | null
           round_ends_on?: string | null
@@ -224,6 +228,8 @@ export type Database = {
         }
         Update: {
           active?: boolean
+          chain_family?: string
+          chain_id?: number
           color?: string | null
           contract_address?: string | null
           created_at?: string
@@ -233,7 +239,6 @@ export type Database = {
           id?: number
           image_url?: string | null
           name?: string
-          network?: string
           pvp_action_log?: Json | null
           room_config?: Json | null
           round_ends_on?: string | null
@@ -351,6 +356,83 @@ export type Database = {
           },
           {
             foreignKeyName: "round_agents_round_id_fkey"
+            columns: ["round_id"]
+            isOneToOne: false
+            referencedRelation: "rounds"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      round_gm_messages: {
+        Row: {
+          created_at: string
+          gm_id: number
+          id: number
+          message: Json | null
+          round_id: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          gm_id: number
+          id?: number
+          message?: Json | null
+          round_id: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          gm_id?: number
+          id?: number
+          message?: Json | null
+          round_id?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "round_gm_messages_gm_id_fkey"
+            columns: ["gm_id"]
+            isOneToOne: false
+            referencedRelation: "game_masters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "round_gm_messages_round_id_fkey"
+            columns: ["round_id"]
+            isOneToOne: false
+            referencedRelation: "rounds"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      round_observations: {
+        Row: {
+          content: Json
+          created_at: string
+          creator: string | null
+          id: number
+          observation_type: string
+          round_id: number
+        }
+        Insert: {
+          content: Json
+          created_at?: string
+          creator?: string | null
+          id?: number
+          observation_type: string
+          round_id: number
+        }
+        Update: {
+          content?: Json
+          created_at?: string
+          creator?: string | null
+          id?: number
+          observation_type?: string
+          round_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "round_observations_round_id_fkey"
             columns: ["round_id"]
             isOneToOne: false
             referencedRelation: "rounds"

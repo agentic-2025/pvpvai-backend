@@ -54,6 +54,11 @@ export interface SystemNotificationContent {
   roundId?: number;
 }
 
+export interface AiContextUpdate {
+  source_type: "news" | "social media" | "onchain" | "other";
+  data: JSON;
+}
+
 export interface AIChatContent {
   message_id: number;
   actor: string; // The blockchain address of the AI agent who sent the message

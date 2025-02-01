@@ -1,14 +1,11 @@
-import { FastifyInstance, FastifyServerOptions } from 'fastify';
-import { supabase, wsOps, AGENT_ENDPOINT } from '../config';
 import axios from 'axios';
-import { WSMessageOutput, AIChatContent } from '../types/ws';
+import { FastifyInstance, FastifyServerOptions } from 'fastify';
+import { AGENT_ENDPOINT, supabase, wsOps } from '../config';
 import { Database } from '../database.types';
 import { DataAndError } from '../types/rest';
+import { AIChatContent, WSMessageOutput } from '../types/ws';
 
-export default async function roomRoutes(
-  server: FastifyInstance,
-  options: FastifyServerOptions
-) {
+export default async function roomRoutes(server: FastifyInstance, options: FastifyServerOptions) {
   // POST /rooms/
   server.post<{
     Body: Database['public']['Tables']['rooms']['Insert'];
@@ -37,30 +34,30 @@ export default async function roomRoutes(
   // validate signature
   server.post<{
     Params: { roomId: number };
-    Body: { agent_id: number, timestamp: number, signature: string, content: any};
-    Reply: { data?: any, error?: string };
+    Body: { agent_id: number; timestamp: number; signature: string; content: any };
+    Reply: { data?: any; error?: string };
   }>('/:roomId/aiChat', async (request, reply) => {
     try {
       const { roomId } = request.params;
-      const { agent_id, timestamp, signature, content} = request.body;
+      const { agent_id, timestamp, signature, content } = request.body;
       const { data: _, error: error } = await supabase
-      .from('room_agents')
-      .select('*')
-      .eq('room_id', roomId)
-      .eq('agent_id', agent_id)
-      .single();
+        .from('room_agents')
+        .select('*')
+        .eq('room_id', roomId)
+        .eq('agent_id', agent_id)
+        .single();
 
       if (error) {
         console.error('Error agent is not in room:', error);
         return reply.status(400).send({ error: error.message });
       }
 
-      const { data: roundData, error: roundError }  =  await supabase
-      .from('rounds')
-      .select('*, round_agents(*)')
-      .eq('room_id', roomId)
-      .eq('active', true)
-      .single();
+      const { data: roundData, error: roundError } = await supabase
+        .from('rounds')
+        .select('*, round_agents(*)')
+        .eq('room_id', roomId)
+        .eq('active', true)
+        .single();
 
       if (roundError) {
         console.error('Error getting round:', roundError);
@@ -68,14 +65,16 @@ export default async function roomRoutes(
       }
 
       const agentIds = roundData.round_agents.map((roundAgent) => roundAgent.id);
-      const promises = agentIds.map(agentId => sendMessageToAgent({
-        roomId: roomId,
-        agentId: agentId,
-        roundId: roundData.id,
-        content: content,
-        timestamp: timestamp,
-        signature: signature,
-      }));
+      const promises = agentIds.map((agentId) =>
+        sendMessageToAgent({
+          roomId: roomId,
+          agentId: agentId,
+          roundId: roundData.id,
+          content: content,
+          timestamp: timestamp,
+          signature: signature,
+        })
+      );
 
       await Promise.all(promises);
 
@@ -88,12 +87,12 @@ export default async function roomRoutes(
 }
 
 async function sendMessageToAgent(params: {
-  roomId: number,
-  agentId: number,
-  roundId: number,
-  content: any,
-  timestamp: number,
-  signature: string,
+  roomId: number;
+  agentId: number;
+  roundId: number;
+  content: any;
+  timestamp: number;
+  signature: string;
 }): Promise<void> {
   const { roomId, agentId, roundId, content, timestamp, signature } = params;
 
@@ -106,13 +105,16 @@ async function sendMessageToAgent(params: {
       agent_id: agentId,
       round_id: roundId,
       message: content,
-    }
+    };
 
-    const { data: roundAgentMessageData, error: insertError } = await supabase
-    .from('round_agent_messages')
-    .insert(agentMessagePayload)
-    .select()
-    .single() as { data: Database['public']['Tables']['round_agent_messages']['Row'], error?: any };
+    const { data: roundAgentMessageData, error: insertError } = (await supabase
+      .from('round_agent_messages')
+      .insert(agentMessagePayload)
+      .select()
+      .single()) as {
+      data: Database['public']['Tables']['round_agent_messages']['Row'];
+      error?: any;
+    };
 
     if (insertError) {
       console.error('Error inserting agent message:', insertError);
@@ -126,14 +128,13 @@ async function sendMessageToAgent(params: {
       content: {
         message_id: roundAgentMessageData.id || 0,
         content: content,
-      } as AIChatContent
+      } as AIChatContent,
     };
 
-    wsOps.broadcastToRoom(roomId, wsMessage);;
+    wsOps.broadcastToRoom(roomId, wsMessage);
 
     console.log(`Message sent to agent ${agentId} successfully.`);
   } catch (error: any) {
     console.error(`Failed to send message to agent ${agentId} with error:`, error);
   }
-
 }
