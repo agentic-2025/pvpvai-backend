@@ -4,6 +4,7 @@
     "start": "node dist/index.js",
     "dev": "nodemon --watch 'src/**' --ext 'ts,json' --exec 'ts-node src/index.ts'",
     "dev-generator": "bun run src/generator.ts",
+    "dev-agent": "nodemon --watch 'src/**' --ext 'ts,json' --exec 'ts-node src/gamemaster/agent.ts'",
     "test:signature": "tsx src/scripts/testSignature.ts",
     "test:signature-mismatch": "tsx src/scripts/testSignatureMismatch.ts",
     "test:signature-expired": "tsx src/scripts/testSignatureExpired.ts"

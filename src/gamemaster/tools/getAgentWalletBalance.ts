@@ -10,6 +10,7 @@ const GET_WALLET_BALANCE_PROMPT = `
 This tool loads a an agent's wallet from the wallets directory and retrieves its balance.
 This tool is used when you want to fetch a wallet balance for a wallet that isn't your own
 Provide the network (e.g., 'base-sepolia') and the agent wallet address to check.
+If you do not see the token listed in the wallet, you can assume the agent has a balance of 0 for that wallet
 `;
 
 // Define the input schema using Zod

@@ -1,4 +1,5 @@
 import { FastifyInstance, FastifyServerOptions } from 'fastify';
+import { observationRoutes } from './routes/observationRoutes';
 import { roomRoutes } from './routes/roomRoutes';
 import { roundRoutes } from './routes/roundRoutes';
 
@@ -39,4 +40,7 @@ export default async function registerRoomRoutes(
 
   // Register round routes
   await roundRoutes(server);
+
+  // Register observation routes
+  await observationRoutes(server);
 }

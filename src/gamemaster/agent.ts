@@ -10,9 +10,10 @@ import * as fs from 'fs';
 import * as readline from 'readline';
 import createWalletTool from './tools/createWallet';
 import getAgentWalletBalanceTool from './tools/getAgentWalletBalance';
-import getCurrentPriceTool from './tools/getCurrentTime';
+// import getCurrentTimeTool from './tools/getCurrentTime';
 import getLatestObservationTool from './tools/getLatestObservation';
 import getRoundDataTool from './tools/getRoundDataFromSupabase';
+import postObservationTool from './tools/postObservation';
 import signMessageTool from './tools/signMessage';
 // import webhookTool from './tools/webhook';
 dotenv.config();
@@ -96,7 +97,8 @@ async function initializeAgent() {
       signMessageTool(agentkit),
       getAgentWalletBalanceTool(agentkit),
       getLatestObservationTool(agentkit),
-      getCurrentPriceTool(agentkit),
+      // getCurrentTimeTool(agentkit),
+      postObservationTool(agentkit),
       // webhookTool(agentkit),
     ];
 
@@ -144,6 +146,8 @@ async function initializeAgent() {
 async function runAutonomousMode(agent: any, config: any, interval = 10) {
   console.log('Starting autonomous mode...');
 
+  const KILL_ME_AT = 10; //TODO Remove me, adding this here in case I leave it running so my credits don't drain.
+  let currentCount = 0;
   // eslint-disable-next-line no-constant-condition
   while (true) {
     try {
@@ -154,37 +158,38 @@ async function runAutonomousMode(agent: any, config: any, interval = 10) {
       2. For each open round:
         - Take note of which chain the room is on, which agents are in the round for the room and what their wallet addresses are, and what token the agents are trading on in the room.
         - Fetch the latest observation data for the latest round of the room from Supabase
-        - Use pyth to fetch the current price of the ERC20 token in the room associated with the round in USD and native.
+        - Use pyth to fetch the current price of the ERC20 token in the room associated with the round in USD and the native token price in USD.
         - Fetch the wallet balance of all agents in the round
         - Record the total value of each agent's wallet in USD and native.
-        - Take note of the current timestamp
         - Prepare a JSON object with the following fields:
           <json>
           {
-            "timestamp": {{current timestamp}},
-            "gameMaster": {{gamemaster wallet address}}
-            "walletBalances": {
-            {{agentId}}: {
-                "nativeBalance": {{nativeBalance}},
-                "tokenBalance": {{room token balance}},
-                "nativeValue": {{value of nativeBalance + tokenBalance in native}},
-                "usdValue": {{value of nativeBalance + tokenBalance in USD}}
-                "percentChangeNative": {{percent change in native value from the previous observation}}
-                "percentChangeUsd": {{percent change in usd value from the previous observation}}
-            },
-            "tokenPriceUsd": {{token price in USD}},
-            "nativePriceUsd": {{native price in USD}}
+            "observationType": "wallet-balances",
+            "account": {{gamemaster wallet address, this is your own wallet address}}
+            "content": {
+              "roomId": {{roomId}},
+              "roundId": {{roundId}}, 
+              "walletBalances": {
+                {{agentId}}: {
+                  "nativeBalance": {{nativeBalance}},
+                  "tokenBalance": {{room token balance}},
+                  "nativeValue": {{value of nativeBalance + tokenBalance in native}},
+                  "usdValue": {{value of nativeBalance + tokenBalance in USD}}
+                  "percentChangeNative": {{percent change in native value from the previous observation, if observation data is empty, this is 0}}
+                  "percentChangeUsd": {{percent change in usd value from the previous observation, if observation_data is empty, this is 0}}
+                },
+                "prices": {
+                  "source": {{which tool you used to get the price data}},
+                  "tokenPriceNative": {{token price in native, if needed this can be inferred from the token price in USD and the native price in USD}},
+                  "tokenPriceUsd": {{token price in USD}},
+                  "nativePriceUsd": {{native price in USD}}
+                }
+              }
+            }
           }
           </json>
          - Create a signature of the JSON object using your own private key
-         - Send a POST request to ${config.BACKEND_URL}/:roomId/round/:roundId with the following body and headers:
-          <headers>
-            Content-Type: application/json
-            X-Authorization-Signature: {{signature of the JSON object}}
-          </headers>
-          <body>
-             {{JSON Object you signed}}
-          </body>
+         - Send a POST request to ${process.env.BACKEND_URL || 'http://localhost:3000'}/observations with the JSON payload above
 
           If you are not able to get all the way through, explain all steps you took and where you stopped.
         `;
@@ -206,6 +211,11 @@ async function runAutonomousMode(agent: any, config: any, interval = 10) {
         console.error('Error:', error.message);
       }
       process.exit(1);
+    }
+    currentCount++;
+    if (currentCount >= KILL_ME_AT) {
+      console.log("HIT MAX ROUNDS FOR AUTO MODE, REMOVE KILL_ME_AT IF YOU DON'T WANT TO AUTO EXIST")
+      process.exit(0);
     }
   }
 }

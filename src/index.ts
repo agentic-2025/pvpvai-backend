@@ -2,9 +2,9 @@ import websocket from '@fastify/websocket';
 import fastify from 'fastify';
 import agentsRoutes from './agents';
 import { wsOps } from './config';
-// import roomsRoutes from './rooms';
 import { signatureVerificationPlugin } from './middleware/signatureVerification';
 import zodSchemaPlugin from './plugins/zodSchema';
+import roomsRoutes from './rooms';
 import { WSMessageInput } from './types/ws';
 
 const server = fastify({
@@ -18,7 +18,7 @@ server.register(zodSchemaPlugin);
 server.register(websocket);
 
 server.register(agentsRoutes, { prefix: '/agents' });
-// server.register(roomsRoutes, { prefix: '/rooms' });
+server.register(roomsRoutes, { prefix: '/rooms' });
 
 // Instead of registering the middleware globally, apply it directly to the protected route
 server.post(
