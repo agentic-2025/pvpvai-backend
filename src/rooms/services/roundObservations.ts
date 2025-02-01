@@ -2,18 +2,21 @@ import { supabase } from '../../config';
 import { RoomOperationResult } from '../types/roomTypes';
 import { Observation, ObservationCreateInput, RoundObservation } from '../types/observationTypes';
 import { hashMessage } from '@coinbase/coinbase-sdk';
+import { Database } from '../../types/database.types';
 
 export class RoundObservationsService {
   async createObservation(data: ObservationCreateInput): Promise<RoomOperationResult<RoundObservation>> {
     try {
+      const observationData = {
+        round_id: data.round_id,
+        observation_type: data.observation_type as 'wallet-balances' | 'price-update' | 'game-event',
+        content: data.content,
+        creator: data.creator || null
+      };
+
       const { data: observation, error } = await supabase
         .from('round_observations')
-        .insert({
-          round_id: data.round_id,
-          observation_type: data.observation_type,
-          content: data.content,
-          creator: data.creator || null
-        })
+        .insert(observationData)
         .select()
         .single();
 
@@ -21,14 +24,14 @@ export class RoundObservationsService {
         return { success: false, error: error.message };
       }
 
-      return { success: true, data: observation };
+      return { success: true, data: observation as RoundObservation };
     } catch (err) {
       console.error('Error in createObservation:', err);
       return { success: false, error: 'Failed to create observation' };
     }
   }
 
-  async getLatestObservation(roundId: number, type: string = 'wallet-balances'): Promise<RoomOperationResult<RoundObservation>> {
+  async getLatestObservation(roundId: number, type: 'wallet-balances' | 'price-update' | 'game-event' = 'wallet-balances'): Promise<RoomOperationResult<RoundObservation>> {
     try {
       const { data: observation, error } = await supabase
         .from('round_observations')
@@ -43,7 +46,7 @@ export class RoundObservationsService {
         return { success: false, error: error.message };
       }
 
-      return { success: true, data: observation };
+      return { success: true, data: observation as RoundObservation };
     } catch (err) {
       console.error('Error in getLatestObservation:', err);
       return { success: false, error: 'Failed to get latest observation' };

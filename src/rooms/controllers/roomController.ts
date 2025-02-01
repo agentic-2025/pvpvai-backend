@@ -1,7 +1,10 @@
-import { roomService } from '../services/roomService';
+import { RoomService } from '../services/roomService';
 import { RoomSetupData, RoomOperationResult, DBRoom, DBRoomAgent } from '../types/roomTypes';
-// import { applyPvp } from '../../pvp';
-// import { wsOps } from '../../config';
+import { applyPvp } from '../../pvp';
+import { wsOps } from '../../config';
+
+// Initialize service instance
+const roomService = new RoomService();
 
 export class RoomController {
   async setupRoom(setupData: RoomSetupData): Promise<RoomOperationResult> {
@@ -44,6 +47,10 @@ export class RoomController {
       console.error('Error in room setup:', err);
       return { success: false, error: 'Internal server error' };
     }
+  }
+
+  async isAgentInRoom(roomId: number, agentId: number): Promise<RoomOperationResult<boolean>> {
+    return await roomService.isAgentInRoom(roomId, agentId);
   }
 
   async addAgentToRoom(roomId: number, agentId: number): Promise<RoomOperationResult<DBRoomAgent>> {
