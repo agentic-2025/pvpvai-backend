@@ -1,6 +1,6 @@
 import { CdpAgentkit } from '@coinbase/cdp-agentkit-core';
 import { CdpTool } from '@coinbase/cdp-langchain';
-import { Wallet, Webhook, WebhookEventType } from '@coinbase/coinbase-sdk';
+import { Wallet, Webhook } from '@coinbase/coinbase-sdk';
 import { z } from 'zod';
 
 // Define the prompt for the webhook creation action
@@ -92,7 +92,7 @@ async function manageWebhook(args: z.infer<typeof WebhookInput>): Promise<string
           const webhook = await Webhook.create({
             networkId: args.networkId!,
             notificationUri: args.notificationUri!,
-            eventType: args.eventType! as WebhookEventType,
+            eventType: args.eventType!,
             eventFilters: [{ contract_address: args.contractAddress }],
             signatureHeader: args.signatureHeader,
           });

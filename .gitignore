@@ -49,3 +49,6 @@ build
 
 # Wallet data
 wallets/*
+
+pc
+notes.md

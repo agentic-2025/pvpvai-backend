@@ -4,8 +4,12 @@ import agentsRoutes from './agents';
 import roomsRoutes from './rooms';
 import { WSMessageInput } from './types/ws';
 import { wsOps } from './config';
+import zodSchemaPlugin from './plugins/zodSchema';
 
 const server = fastify();
+
+// Register Zod validation
+server.register(zodSchemaPlugin);
 
 // Register WebSocket support
 server.register(websocket);
