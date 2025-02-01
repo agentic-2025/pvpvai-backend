@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { FastifyInstance, FastifyServerOptions } from 'fastify';
 import { AGENT_ENDPOINT, supabase, wsOps } from '../config';
-import { Database } from '../database.types';
+import { Database } from '../types/database.types';
 import { DataAndError } from '../types/rest';
 import { AIChatContent, WSMessageOutput } from '../types/ws';
 

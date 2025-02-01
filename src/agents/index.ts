@@ -1,13 +1,13 @@
 import { FastifyInstance, FastifyServerOptions } from "fastify";
 import { supabase } from "../config";
-import { Database } from "../database.types";
+import { Database } from "../types/database.types";
 import { DataAndError } from "../types/rest";
 
 export default async function companyRoutes(
   server: FastifyInstance,
   options: FastifyServerOptions
 ) {
- 
+
   //Note: You do not generally need GET functions for supabas unless you're doing deep data massaging or merging it with other data.
   //The Supabase client has getter functions for all tables already, and the frontend is using it.
   server.post<{
