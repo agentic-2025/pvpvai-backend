@@ -19,7 +19,9 @@
     "@types/ws": "^8.5.14",
     "axios": "^1.7.9",
     "fastify": "^4.24.0",
-    "ws": "^8.18.0"
+    "fastify-zod": "^1.4.0",
+    "ws": "^8.18.0",
+    "zod": "^3.24.1"
   },
   "devDependencies": {
     "@trivago/prettier-plugin-sort-imports": "^5.2.2",
