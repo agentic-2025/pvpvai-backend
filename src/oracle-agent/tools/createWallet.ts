@@ -1,4 +1,3 @@
-import { CdpAgentkit } from '@coinbase/cdp-agentkit-core';
 import { CdpTool } from '@coinbase/cdp-langchain';
 import { Coinbase, Wallet } from '@coinbase/coinbase-sdk';
 import * as fs from 'fs';
@@ -11,6 +10,7 @@ This tool creates a new wallet on a specified network using the Coinbase SDK.
 If no network is specified, it defaults to Base Sepolia testnet.
 You may optionally specify an agent id and room id, when you provide this, this function will save the wallet to the room_agents table, provided one doesn't already exist.
 `;
+
 
 // Define the input schema using Zod
 const CreateWalletInput = z
@@ -123,7 +123,7 @@ async function createWallet(args: z.infer<typeof CreateWalletInput>): Promise<st
   }
 }
 
-const createWalletTool = (agentkit: CdpAgentkit) => {
+const createWalletTool = (agentkit: AgentKit) => {
   return new CdpTool(
     {
       name: 'create_wallet',

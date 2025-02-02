@@ -1,3 +1,5 @@
+import { ObservationType } from "../rooms/routes/observationRoutes";
+
 export type WSMessageInputType =
   | 'subscribe_room'
   | 'unsubscribe_room'
@@ -13,7 +15,8 @@ export type WSMessageOutputType =
   | 'heartbeat'
   | 'ai_chat'
   | 'gm_action'
-  | 'pvp_action';
+  | 'pvp_action'
+  | 'observation';
 
 export interface WSMessageInput {
   type: WSMessageInputType;
@@ -33,7 +36,12 @@ export interface WSMessageOutput {
   type: WSMessageOutputType;
   timestamp: number;
   signature: string;
-  content: PublicChatContent | AIChatContent | GMMessageContent | PVPMessageContent | SystemNotificationContent;
+  content:
+    | PublicChatContent
+    | AIChatContent
+    | GMMessageContent
+    | PVPMessageContent
+    | SystemNotificationContent;
   error?: string;
 }
 
@@ -46,6 +54,29 @@ export interface PublicChatContent {
   timestamp: number;
 }
 
+export interface WalletBalanceData {
+  nativeBalance: BigInt;
+  tokenBalance: BigInt;
+  nativeValue: number;
+  usdValue: number;
+  percentChangeNative: number;
+  percentChangeUsd: number;
+}
+export interface PriceData {
+  source: string;
+  tokenPriceNative: number;
+  tokenPriceUsd: number;
+  nativePriceUsd: number;
+}
+
+export interface ExternalDataContent {
+  account: string;
+  timestamp: number;
+  signature: string;
+  message_type: ObservationType;
+  content: any; 
+}
+
 export interface SystemNotificationContent {
   text: string;
   error: boolean;
@@ -55,7 +86,7 @@ export interface SystemNotificationContent {
 }
 
 export interface AiContextUpdate {
-  source_type: "news" | "social media" | "onchain" | "other";
+  source_type: 'news' | 'social media' | 'onchain' | 'other';
   data: JSON;
 }
 

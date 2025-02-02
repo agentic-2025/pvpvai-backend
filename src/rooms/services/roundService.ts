@@ -1,12 +1,7 @@
 import { supabase } from '../../config';
-import { RoomOperationResult } from '../types/roomTypes';
-import { 
-  RoundDataDB as RoundData, 
-  RoundParticipantDB as RoundParticipant, 
-  RoundMessageDB as RoundMessage, 
-  GMActionDB as GMAction 
-} from '../types/roundTypes';
 import { Database } from '../../types/database.types';
+import { RoomOperationResult } from '../types/roomTypes';
+import { RoundDataDB as RoundData, RoundMessageDB as RoundMessage } from '../types/roundTypes';
 
 export class RoundService {
   async getOrCreateActiveRound(roomId: number): Promise<RoomOperationResult<RoundData>> {
@@ -49,7 +44,7 @@ export class RoundService {
       const messageData: Database['public']['Tables']['round_agent_messages']['Insert'] = {
         round_id: roundId,
         agent_id: agentId,
-        message: message
+        message: message,
       };
 
       const { data: storedMessage, error } = await supabase
@@ -70,10 +65,7 @@ export class RoundService {
   }
 
   private async deactivateRoomRounds(roomId: number): Promise<void> {
-    const { error } = await supabase
-      .from('rounds')
-      .update({ active: false })
-      .eq('room_id', roomId);
+    const { error } = await supabase.from('rounds').update({ active: false }).eq('room_id', roomId);
 
     if (error) throw error;
   }
@@ -100,8 +92,8 @@ export class RoundService {
         active: true,
         game_master_id: room.game_master_id,
         round_config: {
-          round_ends_on: roundEndsOn.toISOString()
-        }
+          round_ends_on: roundEndsOn.toISOString(),
+        },
       };
 
       const { data: newRound, error: createError } = await supabase
@@ -127,9 +119,9 @@ export class RoundService {
     try {
       const { error } = await supabase
         .from('rounds')
-        .update({ 
+        .update({
           active: false,
-          outcome: outcome 
+          outcome: outcome,
         })
         .eq('id', roundId);
 
@@ -150,8 +142,8 @@ export class RoundService {
         kicked: true,
         outcome: {
           reason: 'kicked_by_gm',
-          timestamp: new Date().toISOString()
-        }
+          timestamp: new Date().toISOString(),
+        },
       };
 
       const { error } = await supabase
@@ -180,14 +172,12 @@ export class RoundService {
     if (fetchError) throw fetchError;
 
     if (roomAgents && roomAgents.length > 0) {
-      const roundAgentsData = roomAgents.map(ra => ({
+      const roundAgentsData = roomAgents.map((ra) => ({
         round_id: roundId,
-        agent_id: ra.agent_id
+        agent_id: ra.agent_id,
       }));
 
-      const { error: insertError } = await supabase
-        .from('round_agents')
-        .insert(roundAgentsData);
+      const { error: insertError } = await supabase.from('round_agents').insert(roundAgentsData);
 
       if (insertError) throw insertError;
     }

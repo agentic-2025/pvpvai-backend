@@ -3,17 +3,14 @@ import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { SIGNATURE_WINDOW_MS } from '../config';
 
-// Constants
-
-// Types
-type SignedRequest = {
-  account: string;
-  timestamp: number;
-  [key: string]: any;
-};
+export const signedRequestHeaderSchema = z
+  .object({
+    'x-authorization-signature': z.string(),
+  })
+  .passthrough();
 
 // Zod schema for auth data in body
-const signedRequestSchema = z
+export const signedRequestBodySchema = z
   .object({
     account: z.string(),
     // Ensure timestamp is UTC unix timestamp in milliseconds
@@ -32,8 +29,8 @@ const extractAddressFromMessage = (message: string, signature: string): string =
 
 export const signatureVerificationPlugin = async (
   request: FastifyRequest<{
-    Headers: { 'x-authorization-signature': string };
-    Body: SignedRequest;
+    Headers: z.infer<typeof signedRequestHeaderSchema>;
+    Body: z.infer<typeof signedRequestBodySchema>;
   }>,
   reply: FastifyReply
 ) => {
@@ -45,7 +42,7 @@ export const signatureVerificationPlugin = async (
       });
     }
 
-    const body = signedRequestSchema.parse(request.body);
+    const body = signedRequestBodySchema.parse(request.body);
     const now = Date.now(); // UTC timestamp
 
     if (body.timestamp > now) {
