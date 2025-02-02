@@ -124,6 +124,7 @@ export type Database = {
           room_id: number
           updated_at: string
           wallet_address: string | null
+          wallet_json: Json | null
         }
         Insert: {
           agent_id: number
@@ -132,6 +133,7 @@ export type Database = {
           room_id: number
           updated_at?: string
           wallet_address?: string | null
+          wallet_json?: Json | null
         }
         Update: {
           agent_id?: number
@@ -140,6 +142,7 @@ export type Database = {
           room_id?: number
           updated_at?: string
           wallet_address?: string | null
+          wallet_json?: Json | null
         }
         Relationships: [
           {

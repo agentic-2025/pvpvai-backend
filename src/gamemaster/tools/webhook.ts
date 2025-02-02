@@ -76,7 +76,7 @@ async function manageWebhook(args: z.infer<typeof WebhookInput>): Promise<string
       case 'create': {
         if (args.walletId) {
           // Create wallet webhook
-          const wallet = await Wallet.import({ walletData: { id: args.walletId } });
+          const wallet = await Wallet.import(args.walletId);
           const webhook = await wallet.createWebhook(args.notificationUri!);
           return JSON.stringify(
             {

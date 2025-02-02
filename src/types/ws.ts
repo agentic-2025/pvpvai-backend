@@ -1,3 +1,7 @@
+// src/types/ws.ts
+
+import { PostgrestResponse } from '@supabase/supabase-js';
+
 export type WSMessageInputType =
   | 'subscribe_room'
   | 'unsubscribe_room'
@@ -5,7 +9,8 @@ export type WSMessageInputType =
   | 'heartbeat'
   | 'system_notification'
   | 'ai_chat'
-  | 'pvp_action';
+  | 'pvp_action'
+  | 'gm_action';
 
 export type WSMessageOutputType =
   | 'system_notification'
@@ -26,6 +31,8 @@ export interface WSMessageInput {
     roundId?: number;
     text?: string;
     data?: any;
+    actionType?: string;
+    targets?: string[];
   };
 }
 
@@ -33,7 +40,7 @@ export interface WSMessageOutput {
   type: WSMessageOutputType;
   timestamp: number;
   signature: string;
-  content: PublicChatContent | AIChatContent | GMMessageContent | PVPMessageContent | SystemNotificationContent;
+  content: PublicChatContent | AIChatContent | GMMessageContent | PVPMessageContent | SystemNotificationContent | HeartbeatContent;
   error?: string;
 }
 
@@ -54,50 +61,59 @@ export interface SystemNotificationContent {
   roundId?: number;
 }
 
-export interface AiContextUpdate {
-  source_type: "news" | "social media" | "onchain" | "other";
-  data: JSON;
-}
-
 export interface AIChatContent {
-  message_id: number;
-  actor: string; // The blockchain address of the AI agent who sent the message
-  sent: number; // UTC timestamp in milliseconds when message was sent to backend
-  originalContent?: {
-    // Original message content before any modifications. Will be empty and should be ignored if message was not altered.
-    text: string;
-  };
-
-  content: {
-    // Current message content. If the message was altered, this will be the altered version. Supports text initially, will be expanded to support full Eliza Message type later
-    text: string;
-  };
+  message_id?: number;
+  actor?: string;
+  author?: number;
+  roomId: number;
+  roundId: number;
+  text: string;
   timestamp: number;
-  altered: boolean; // Indicates if message was modified by PVP actions. When present, app can render a different UI for the message
+  sent?: number;
+  content?: {
+    text: string;
+  };
+  originalContent?: {
+    text: string;
+  };
+  altered?: boolean;
 }
 
 export interface PVPMessageContent {
-  message_id: number;
-  txHash: string;
+  message_id?: number;
+  txHash?: string;
   roomId: number;
-  roundId: number;
-  instigator: string; // The address of the person who took the action
-  //Silence = mute agent from sending messages, Deafen = block agent from receiving messages, Attack = Direct DM, Poison = Alter agent messages
-  actionType: 'Silence' | 'Deafen' | 'Attack' | 'Poison';
-  targets: string[]; // addresses of agents the action is being taken on
-  additionalData: {
-    // Free form object containing data, like find and replace data for Poison, text to inject for Attack
-  };
+  roundId?: number;
+  instigator?: string; // should be string
+  actionType: string;
+  targets: string[];
+  additionalData?: Record<string, any>;
 }
 
 export interface GMMessageContent {
-  message_id: number;
-  gm_id: string; //Address of the GM taking the action TODO change to addresslike
-  content: {
+  message_id?: number;
+  text: string;
+  gm_id: string;
+  content?: {
     text: string;
-  }; // The content of the GM message, typically describes the action being taken. Can support just text initially, eventually need to support full message type
-  targets: string[]; // If the GM is taking action against a specific agent, like kicking them or forcing a decision, the targets will appear here.
-  timestamp: number;
+  };
+  targets: string[];
+  roomId: number;
+  timestamp?: number;
 }
 
-export interface HeartbeatContent {}
+export interface HeartbeatContent {
+  timestamp?: number;
+}
+
+export interface DbResult<T> {
+  data: T[];
+  error: Error | null;
+}
+
+export interface SingleDbResult<T> {
+  data: T;
+  error: Error | null;
+}
+
+export type DbResponse<T> = PostgrestResponse<T>;

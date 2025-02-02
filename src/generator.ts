@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import WebSocket from 'ws';
-import { Database } from './database.types';
-import { PVPMessageContent, WSMessageInput, WSMessageOutput } from './types/ws';
+import { Database } from './types/database.types';
+import { GMMessageContent, PVPMessageContent, WSMessageInput, WSMessageOutput } from './types/ws';
 
 const supabase = createClient<Database>(
   process.env.SUPABASE_URL || '',
@@ -261,6 +261,8 @@ async function generateMessages() {
                 roomId: roomAndRound.roomId,
                 roundId: roomAndRound.roundId,
                 text: getRandomGMAction(),
+                gm_id: activeConnection.userId.toString(), // Added required gm_id
+                targets: [] // Added required targets array
               } as GMMessageContent,
             };
           } else if (rand < 0.3) {
@@ -274,6 +276,7 @@ async function generateMessages() {
                 roundId: roomAndRound.roundId,
                 text: action.message,
                 actionType: action.type,
+                targets: [Math.floor(Math.random() * 100).toString()] // Added required targets array with random target
               } as PVPMessageContent,
             };
           } else {

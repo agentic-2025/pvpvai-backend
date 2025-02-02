@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { Database } from './types/database.types';
-import { WSOperations } from './ws/operations';
+import { WSOperations } from './ws/operations'; // Fix: Updated import path
 
 // Initialize Supabase client
 const supabaseUrl = process.env.SUPABASE_URL || '';
