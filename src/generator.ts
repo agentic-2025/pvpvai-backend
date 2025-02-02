@@ -1,7 +1,16 @@
+import { faker } from '@faker-js/faker';
 import { createClient } from '@supabase/supabase-js';
 import WebSocket from 'ws';
-import { Database } from './database.types';
-import { PVPMessageContent, WSMessageInput, WSMessageOutput } from './types/ws';
+import { Database } from './types/database.types';
+import {
+  AIChatContent,
+  GMMessageContent,
+  PublicChatContent,
+  PVPMessageContent,
+  WSMessageInput,
+  WSMessageOutput,
+  WsMessageType,
+} from './types/ws';
 
 const supabase = createClient<Database>(
   process.env.SUPABASE_URL || '',
@@ -252,43 +261,73 @@ async function generateMessages() {
 
           if (rand < BAD_MESSAGE_PROBABILITY) {
             message = generateBadMessage();
-          } else if (rand < 0.15) {
+          } else if (rand < 0.1) {
             message = {
-              type: 'gm_action',
+              type: WsMessageType.GM_ACTION,
               author: activeConnection.userId,
               timestamp: Date.now(),
               content: {
+                messageId: rand * 100,
+                gmId: 1,
                 roomId: roomAndRound.roomId,
                 roundId: roomAndRound.roundId,
-                text: getRandomGMAction(),
+                content: {
+                  text: getRandomGMAction(),
+                },
+                timestamp: Date.now(),
               } as GMMessageContent,
             };
-          } else if (rand < 0.3) {
+          } else if (rand < 0.2) {
             const action = getRandomPVPAction();
             message = {
-              type: 'pvp_action',
+              type: WsMessageType.PVP_ACTION,
               author: activeConnection.userId,
               timestamp: Date.now(),
               content: {
+                messageId: rand * 100,
+                txHash: '0x123',
                 roomId: roomAndRound.roomId,
                 roundId: roomAndRound.roundId,
-                text: action.message,
+                instigator: faker.finance.ethereumAddress(),
+                targets: [],
+                additionalData: {},
                 actionType: action.type,
               } as PVPMessageContent,
             };
+          } else if (rand < 0.4) {
+            //TODO put random ai
+            message = {
+              type: WsMessageType.AI_CHAT,
+              author: activeConnection.userId,
+              timestamp: Date.now(),
+              content: {
+                messageId: rand * 100,
+                roomId: roomAndRound.roomId,
+                roundId: roomAndRound.roundId,
+                actor: faker.finance.ethereumAddress(),
+                sent: Date.now(),
+                originalContent: {
+                  text: getRandomMessage(),
+                },
+                content: {
+                  text: getRandomMessage(),
+                },
+                timestamp: Date.now(),
+                altered: rand / 100 % 2 === 0,
+              } as AIChatContent,
+            };
           } else {
             message = {
-              type: 'public_chat',
+              type: WsMessageType.PUBLIC_CHAT,
               author: activeConnection.userId,
               timestamp: Date.now(),
               content: {
                 roomId: roomAndRound.roomId,
                 roundId: roomAndRound.roundId,
                 text: getRandomMessage(),
-              },
+              } as PublicChatContent,
             };
           }
-
           activeConnection.ws.send(JSON.stringify(message));
           console.log(`User ${activeConnection.userId} sent message:`, message);
         }

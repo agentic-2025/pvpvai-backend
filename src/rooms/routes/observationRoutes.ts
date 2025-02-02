@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { supabase, wsOps } from '../../config';
 import { signedRequestHeaderSchema } from '../../middleware/signatureVerification';
+import { WsMessageType } from '../../types/ws';
 import { roundController } from '../controllers/roundController';
 
 export enum ObservationType {
@@ -134,7 +135,7 @@ export async function observationRoutes(server: FastifyInstance) {
           };
 
           await wsOps.broadcastToRoom(roomId, {
-            type: 'observation',
+            type: WsMessageType.OBSERVATION,
             timestamp: observation.timestamp,
             signature: request.headers['x-authorization-signature'],
             content: enrichedContent,

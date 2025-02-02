@@ -1,25 +1,19 @@
-import { ObservationType } from "../rooms/routes/observationRoutes";
+import { ObservationType } from '../rooms/routes/observationRoutes';
 
-export type WSMessageInputType =
-  | 'subscribe_room'
-  | 'unsubscribe_room'
-  | 'public_chat'
-  | 'heartbeat'
-  | 'system_notification'
-  | 'ai_chat'
-  | 'pvp_action';
-
-export type WSMessageOutputType =
-  | 'system_notification'
-  | 'public_chat'
-  | 'heartbeat'
-  | 'ai_chat'
-  | 'gm_action'
-  | 'pvp_action'
-  | 'observation';
+export enum WsMessageType {
+  SUBSCRIBE_ROOM = 'subscribe_room',
+  UNSUBSCRIBE_ROOM = 'unsubscribe_room',
+  PUBLIC_CHAT = 'public_chat',
+  HEARTBEAT = 'heartbeat',
+  GM_ACTION = 'gm_action',
+  SYSTEM_NOTIFICATION = 'system_notification',
+  AI_CHAT = 'ai_chat',
+  PVP_ACTION = 'pvp_action',
+  OBSERVATION = 'observation',
+}
 
 export interface WSMessageInput {
-  type: WSMessageInputType;
+  type: WsMessageType;
   timestamp?: number;
   signature?: string;
   author?: number;
@@ -33,7 +27,7 @@ export interface WSMessageInput {
 }
 
 export interface WSMessageOutput {
-  type: WSMessageOutputType;
+  type: WsMessageType;
   timestamp: number;
   signature: string;
   content:
@@ -74,7 +68,7 @@ export interface ExternalDataContent {
   timestamp: number;
   signature: string;
   message_type: ObservationType;
-  content: any; 
+  content: any;
 }
 
 export interface SystemNotificationContent {
@@ -91,7 +85,9 @@ export interface AiContextUpdate {
 }
 
 export interface AIChatContent {
-  message_id: number;
+  messageId: number;
+  roomId: number;
+  roundId: number;
   actor: string; // The blockchain address of the AI agent who sent the message
   sent: number; // UTC timestamp in milliseconds when message was sent to backend
   originalContent?: {
@@ -108,7 +104,7 @@ export interface AIChatContent {
 }
 
 export interface PVPMessageContent {
-  message_id: number;
+  messageId: number;
   txHash: string;
   roomId: number;
   roundId: number;
@@ -122,12 +118,14 @@ export interface PVPMessageContent {
 }
 
 export interface GMMessageContent {
-  message_id: number;
-  gm_id: string; //Address of the GM taking the action TODO change to addresslike
+  messageId: number;
+  gmId: number; //Address of the GM taking the action TODO change to addresslike
+  roomId: number;
+  roundId: number;
   content: {
     text: string;
   }; // The content of the GM message, typically describes the action being taken. Can support just text initially, eventually need to support full message type
-  targets: string[]; // If the GM is taking action against a specific agent, like kicking them or forcing a decision, the targets will appear here.
+  // targets: string[]; // If the GM is taking action against a specific agent, like kicking them or forcing a decision, the targets will appear here.
   timestamp: number;
 }
 

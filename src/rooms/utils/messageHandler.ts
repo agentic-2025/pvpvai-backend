@@ -1,8 +1,7 @@
 import axios from 'axios';
-import { supabase } from '../../config';
+import { supabase, wsOps } from '../../config';
 import { Database } from '../../types/database.types';
-import { WSMessageOutput } from '../../types/ws';
-import { wsOps } from '../../config';
+import { AIChatContent, WSMessageOutput, WsMessageType } from '../../types/ws';
 
 export async function sendMessageToAgent(params: {
   roomId: number;
@@ -45,7 +44,7 @@ export async function sendMessageToAgent(params: {
       await axios.post(endpointUrl.toString(), {
         text: messageText,
         roomId: roomId,
-        roundId: roundId
+        roundId: roundId,
       });
 
       // Store message in database
@@ -54,8 +53,8 @@ export async function sendMessageToAgent(params: {
         round_id: roundId,
         message: {
           text: messageText,
-          timestamp: timestamp
-        }
+          timestamp: timestamp,
+        },
       };
 
       const { data: roundAgentMessageData, error: insertError } = await supabase
@@ -71,36 +70,33 @@ export async function sendMessageToAgent(params: {
 
       // Broadcast to WebSocket
       const wsMessage: WSMessageOutput = {
-        type: 'ai_chat',
+        type: WsMessageType.AI_CHAT,
         timestamp: timestamp,
         signature: signature,
         content: {
-          message_id: roundAgentMessageData.id,
+          messageId: roundAgentMessageData.id,
+          roomId: roomId,
+          roundId: roundId,
           actor: agentId.toString(),
           sent: timestamp,
           content: {
-            text: messageText
+            text: messageText,
           },
           timestamp: timestamp,
-          altered: false
-        }
+          altered: false,
+        } as AIChatContent,
       };
 
       await wsOps.broadcastToRoom(roomId, wsMessage);
-
     } catch (error: any) {
       console.error(`Failed to send message to agent ${agentId}:`, error);
       console.log('Agent endpoint:', agentData.endpoint);
       console.log('Message content:', content);
-      
+
       if (error.code === 'ECONNREFUSED' || error.response?.status === 502) {
-        await supabase
-          .from('agents')
-          .update({ status: 'Down' })
-          .eq('id', agentId);
+        await supabase.from('agents').update({ status: 'Down' }).eq('id', agentId);
       }
     }
-
   } catch (error) {
     console.error(`Failed to process message for agent ${agentId}:`, error);
   }

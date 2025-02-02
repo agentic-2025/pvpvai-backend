@@ -6,6 +6,7 @@ import {
   SystemNotificationContent,
   WSMessageInput,
   WSMessageOutput,
+  WsMessageType,
 } from '../types/ws';
 
 // Types for room management
@@ -66,6 +67,7 @@ export class WSOperations {
           if (client.readyState === WebSocket.OPEN) {
             sendPromises.push(
               new Promise<void>((resolve, reject) => {
+                console.log(`Sending message to user ${userId} in room ${roomId}:`, messageString);
                 client.send(messageString, (err: any) => {
                   if (err) reject(err);
                   else resolve();
@@ -144,7 +146,7 @@ export class WSOperations {
     await this.broadcastToRoom(
       roomId,
       {
-        type: 'public_chat',
+        type: WsMessageType.PUBLIC_CHAT,
         timestamp: Date.now(),
         signature: '',
         content: {
@@ -165,10 +167,10 @@ export class WSOperations {
 
   //Happens when a user enters a room in the frontend.
   async handleSubscribeRoom(client: WebSocket, message: WSMessageInput): Promise<void> {
-    if (!message.content?.roomId || !message?.author) {
+    if (!message.content?.roomId || !message.author) {
       this.sendSystemMessage(
         client,
-        'Subscribe message needs content.room_id and author',
+        'Subscribe message needs content.room_id and author', //TODO should not require author
         true,
         message
       );
@@ -234,7 +236,7 @@ export class WSOperations {
     const userConnections = room.get(message.author)!;
     if (userConnections.size === 1) {
       await this.broadcastToRoom(message.content.roomId, {
-        type: 'system_notification',
+        type: WsMessageType.SYSTEM_NOTIFICATION,
         timestamp: Date.now(),
         signature: '',
         content: {
@@ -341,7 +343,7 @@ export class WSOperations {
           }
           // Send message to all users in the room that the user has left
           await this.broadcastToRoom(roomId, {
-            type: 'system_notification',
+            type: WsMessageType.SYSTEM_NOTIFICATION,
             timestamp: Date.now(),
             signature: '',
             content: {

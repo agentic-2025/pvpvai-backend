@@ -13,6 +13,7 @@
     "@coinbase/agentkit-langchain": "^0.1.0",
     "@coinbase/cdp-agentkit-core": "^0.0.14",
     "@coinbase/cdp-langchain": "^0.0.15",
+    "@faker-js/faker": "^9.4.0",
     "@fastify/type-provider-typebox": "^5.1.0",
     "@fastify/websocket": "^8.3.1",
     "@langchain/anthropic": "^0.3.12",
@@ -38,7 +39,6 @@
     "prettier-plugin-packagejson": "^2.5.8",
     "supabase": "^2.9.6",
     "ts-node": "^10.9.2",
-    "typescript": "^5.7.3",
-    "faker": "^6.6.6"
+    "typescript": "^5.7.3"
   }
 }
