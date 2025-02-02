@@ -40,14 +40,27 @@ const getAgentWalletBalanceProvider = customActionProvider<EvmWalletProvider>({
   name: 'get_agent_wallet_balance',
   description: GET_WALLET_BALANCE_PROMPT,
   schema: GetWalletBalanceInput,
-  invoke: async (_, args: z.infer<typeof GetWalletBalanceInput>): Promise<string> => {
+  invoke: async (walletProvider, args: z.infer<typeof GetWalletBalanceInput>): Promise<string> => {
     try {
+      const config = {
+        apiKeyName: process.env.CDP_API_KEY_NAME,
+        apiKeyPrivateKey: process.env.CDP_API_KEY_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+      };
+      if (!config.apiKeyName || !config.apiKeyPrivateKey) {
+        throw new Error('CDP_API_KEY_NAME and CDP_API_KEY_PRIVATE_KEY must be set to get agent balances');
+      }
+      //
+      Coinbase.configure({
+        apiKeyName: config.apiKeyName,
+        privateKey: config.apiKeyPrivateKey,
+      });
       const results = await Promise.all(
         args.wallets.map(async (walletInfo) => {
           try {
             let walletData: WalletData;
 
             console.log('walletInfo', walletInfo);
+            console.log('agentkit');
             if (walletInfo.wallet_json) {
               walletData = JSON.parse(walletInfo.wallet_json) as WalletData;
             } else if (walletInfo.address) {

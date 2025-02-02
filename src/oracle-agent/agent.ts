@@ -121,6 +121,7 @@ async function initializeAgent() {
     console.log('cdpWalletData', config);
 
     const walletProvider = await CdpWalletProvider.configureWithWallet(config);
+    
     // Initialize CDP AgentKit
     // Initialize AgentKit
     const agentkit = await AgentKit.from({
