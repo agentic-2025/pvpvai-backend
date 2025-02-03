@@ -3,6 +3,8 @@ import { supabase } from '../config';
 import {
   HeartbeatContent,
   PublicChatContent,
+  AIChatContent,
+  GMMessageContent,
   SystemNotificationContent,
   WSMessageInput,
   WSMessageOutput,
@@ -85,7 +87,7 @@ export class WSOperations {
   }
 
   async handlePublicChat(client: WebSocket, message: WSMessageInput): Promise<void> {
-    const { roomId, roundId, text } = message.content;
+    const { roomId, roundId, text } = message.content as PublicChatContent;
     if (!roomId || !roundId || !text || !message.author) {
       this.sendSystemMessage(
         client,
@@ -155,13 +157,97 @@ export class WSOperations {
           author: message.author,
           roomId: roomId,
           roundId: roundId,
-          text: message.content.text,
+          text: text,
         } as PublicChatContent,
       },
       message.author
     );
     console.log(
       `Message #${data.id} from user ${message.author} broadcasted to room #${message.content.roomId}`
+    );
+  }
+
+  async handleGMChat(client: WebSocket, message: WSMessageInput): Promise<void> {
+    const { roomId, roundId, content, gmId } = message.content as GMMessageContent;
+    const { text } = content;
+    if (!roomId || !roundId || !text || !gmId) {
+      this.sendSystemMessage(
+        client,
+        'Invalid public chat message, needs content.room_id, content.round_id, content.text, and content.gmId',
+        true,
+        message
+      );
+      return;
+    }
+
+    // Check room and round exist with a join query
+    const { data: roundData, error: joinError } = await supabase
+      .from('rounds')
+      .select(`*,rooms!inner(*)`)
+      .eq('id', roundId)
+      .eq('rooms.id', roomId)
+      .single();
+
+    if (joinError) {
+      this.sendSystemMessage(client, 'Invalid room or round ID provided', true, message);
+      return;
+    }
+
+    // Check if round is active
+    if (!roundData.active) {
+      this.sendSystemMessage(
+        client,
+        'This round is not active - messages cannot be added',
+        true,
+        message
+      );
+      return;
+    }
+
+    // Store message in database
+    const { data, error } = await supabase
+      .from('round_agent_messages')
+      .insert({
+        round_id: roundId,
+        agent_id: gmId,
+        message_type: message.type,
+        message: {
+          text: content.text,
+        },
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error(
+        `Failed to save message from agent ${message.author} in round ${message.content.roundId}:`,
+        error
+      );
+      this.sendSystemMessage(client, `Failed to save message: ${error.message}`, true);
+      return;
+    }
+
+    // Broadcast to all participants concurrently
+    await this.broadcastToRoom(
+      roomId,
+      {
+        type: WsMessageType.GM_ACTION,
+        timestamp: Date.now(),
+        signature: '',
+        content: {
+          messageId: data.id,
+          gmId: message.author,
+          roomId: roomId,
+          roundId: roundId,
+          content: {
+            text: text,
+          }
+        } as GMMessageContent,
+      },
+      message.author
+    );
+    console.log(
+      `Message #${data.id} from GM ${message.author} broadcasted to room #${message.content.roomId}`
     );
   }
 

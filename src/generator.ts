@@ -256,8 +256,10 @@ async function generateMessages() {
       if (roomAndRound && connections.length > 0) {
         const activeConnection = connections[Math.floor(Math.random() * connections.length)];
         if (activeConnection.ws.readyState === WebSocket.OPEN) {
-          const rand = Math.random();
+          const rand = Math.random() * 0.6;
           let message: WSMessageInput;
+
+          // TODO: fix author for agent messages, must be a foreing key to agents table
 
           if (rand < BAD_MESSAGE_PROBABILITY) {
             message = generateBadMessage();
@@ -268,7 +270,7 @@ async function generateMessages() {
               timestamp: Date.now(),
               content: {
                 messageId: rand * 100,
-                gmId: 1,
+                gmId: 5,
                 roomId: roomAndRound.roomId,
                 roundId: roomAndRound.roundId,
                 content: {

@@ -18,12 +18,12 @@ export interface WSMessageInput {
   signature?: string;
   author?: number;
   chainId?: number;
-  content: {
-    roomId?: number;
-    roundId?: number;
-    text?: string;
-    data?: any;
-  };
+  content:
+    | PublicChatContent
+    | AIChatContent
+    | GMMessageContent
+    | PVPMessageContent
+    | SystemNotificationContent
 }
 
 export interface WSMessageOutput {

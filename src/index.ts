@@ -5,7 +5,7 @@ import { wsOps } from './config';
 import { signatureVerificationPlugin } from './middleware/signatureVerification';
 import zodSchemaPlugin from './plugins/zodSchema';
 import roomsRoutes from './rooms';
-import { WSMessageInput } from './types/ws';
+import { WSMessageInput, WsMessageType } from './types/ws';
 
 const server = fastify({
   logger: true,
@@ -58,19 +58,23 @@ server.register(async function (fastify) {
         const data = JSON.parse(message.toString()) as WSMessageInput;
 
         switch (data.type) {
-          case 'subscribe_room':
+          case WsMessageType.SUBSCRIBE_ROOM:
             wsOps.handleSubscribeRoom(client, data);
             break;
 
-          case 'unsubscribe_room':
+          case WsMessageType.UNSUBSCRIBE_ROOM:
             wsOps.handleUnsubscribeRoom(client, data);
             break;
 
-          case 'public_chat':
+          case WsMessageType.PUBLIC_CHAT:
             await wsOps.handlePublicChat(client, data);
             break;
 
-          case 'heartbeat':
+          case WsMessageType.GM_ACTION:
+            await wsOps.handleGMChat(client, data);
+            break;
+
+          case WsMessageType.HEARTBEAT:
             wsOps.handleHeartbeat(client);
             break;
         }
