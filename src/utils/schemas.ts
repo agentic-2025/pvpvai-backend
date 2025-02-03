@@ -29,7 +29,7 @@ export const observationMessageInputSchema = z.object({
     roomId: z.number(), // Redundant with path, but kept here since this message is passthrough to AI Chat for frontend.
     roundId: z.number(),
     observationType: z.nativeEnum(ObservationType),
-    data: z.any(),
+    data: z.any(), // TODO Tighten up this type later
   }),
 });
 
@@ -89,7 +89,7 @@ export const agentMessageInputSchema = z.object({
 export const agentMessageAgentOutputSchema = agentMessageInputSchema;
 // Message sent to AI Chat (players) includes PvP details
 export const agentMessageAiChatOutputSchema = z.object({
-  type: z.literal(WsMessageOutputTypes.AI_CHAT_AGENT_MESSAGE_OUTPUT),
+  messageType: z.literal("agent_message"),
   content: z.object({
     timestamp: z.number(),
     roomId: z.number(),
@@ -124,7 +124,7 @@ export const agentMessageAiChatOutputSchema = z.object({
   Note: As this cannot be received no input schema is needed.
 */
 export const systemNotificationOutputSchema = z.object({
-  type: z.literal('system_notification'),
+  messageType: z.literal('system_notification'),
   content: z.object({
     timestamp: z.number(),
     roomId: z.number().optional(),
@@ -148,14 +148,14 @@ export const systemNotificationOutputSchema = z.object({
   Purpose: Gives the user the number of participants in the room
 */
 export const participantsInputMessageSchema = z.object({
-  type: z.literal(WsMessageInputTypes.PARTICIPANTS_INPUT),
+  messageType: z.literal("participants"),
   content: z.object({
     roomId: z.number().int().positive(),
   }),
 });
 
 export const participantsOutputMessageSchema = z.object({
-  type: z.literal(WsMessageOutputTypes.PARTICIPANTS_OUTPUT),
+  messageType: z.literal("participants"),
   content: z.object({
     timestamp: z.number().int().positive(),
     roomId: z.number().int().positive(),

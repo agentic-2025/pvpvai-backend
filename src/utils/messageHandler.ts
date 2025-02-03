@@ -171,6 +171,15 @@ export async function processAgentMessage(
   }
 }
 
+export async function processGmMessage(
+  message: any //TODO wrong type
+): Promise<ProcessMessageResponse> {
+return {
+    message: 'GM message processed',
+    data: message,
+    statusCode: 200,
+  };
+}
 // This function is for sending a message to an agent.
 // Currently it only sends over REST, but it will later be extended to send over WS later
 // It is a simple wrapper around an axios call right now, but we can later extend this to track confirmations that the agent received the message

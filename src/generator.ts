@@ -1,14 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
-import WebSocket from 'ws';
+import { Wallet } from 'ethers';
+import { WebSocket } from 'ws';
+import { z } from 'zod';
 import { Database } from './types/database.types';
-import {
-  AIChatContent,
-  GMMessageContent,
-  PVPMessageContent,
-  WSMessageInput,
-  WSMessageOutput,
-  WsMessageType,
-} from './types/ws';
+import { WsMessageInputTypes } from './types/ws';
+import { participantsInputMessageSchema, publicChatMessageInputSchema } from './utils/schemas';
 
 const supabase = createClient<Database>(
   process.env.SUPABASE_URL || '',
@@ -19,8 +15,8 @@ const WEBSOCKET_URL = process.env.WEBSOCKET_URL || 'ws://localhost:3000/ws';
 const MIN_DELAY = 1000;
 const MAX_DELAY = 5000;
 const NUM_TEST_USERS = 3;
-const CONNECTIONS_PER_USER = 5; // Each user will have this many "tabs" open
-const RECONNECT_INTERVAL = 10000; // Some connections will disconnect/reconnect every 30s
+const CONNECTIONS_PER_USER = 5;
+const RECONNECT_INTERVAL = 10000;
 const BAD_MESSAGE_PROBABILITY = 0.005;
 
 const randomDelay = () => Math.floor(Math.random() * (MAX_DELAY - MIN_DELAY + 1)) + MIN_DELAY;
@@ -60,12 +56,9 @@ const sampleAIMessages = [
 ];
 
 const getRandomMessage = () => sampleMessages[Math.floor(Math.random() * sampleMessages.length)];
-
 const getRandomGMAction = () => sampleGMActions[Math.floor(Math.random() * sampleGMActions.length)];
-
 const getRandomPVPAction = () =>
   samplePVPActions[Math.floor(Math.random() * samplePVPActions.length)];
-
 const getRandomAIMessage = () =>
   sampleAIMessages[Math.floor(Math.random() * sampleAIMessages.length)];
 
@@ -112,24 +105,32 @@ async function getActiveRoomAndRound() {
   };
 }
 
-function generateBadMessage(): Partial<WSMessageInput> {
+function generateBadMessage(): Partial<any> {
   const badMessages = [
-    { type: 'invalid_type' as WsMessageType },
-    { type: 'public_chat' as WsMessageType, content: {} },
-    { type: 'public_chat' as WsMessageType, content: { roomId: 'not_a_number' } },
-    { type: 'subscribe_room' as WsMessageType },
+    { type: 'invalid_type' },
+    { type: 'public_chat', content: {} },
+    { type: 'public_chat', content: { roomId: 'not_a_number' } },
+    { type: 'subscribe_room' },
     {},
     null,
     undefined,
   ];
-  return badMessages[Math.floor(Math.random() * badMessages.length)] as Partial<WSMessageInput>;
+  return badMessages[Math.floor(Math.random() * badMessages.length)];
 }
 
 interface Connection {
   ws: WebSocket;
   userId: number;
+  wallet: Wallet;
   isSubscribed: boolean;
   currentRoom: { roomId: number; roundId: number } | null;
+}
+
+async function signMessage(content: any): Promise<string> {
+  // Convert content to string and hash it
+  const messageStr = JSON.stringify(content);
+  const messageHash = Wallet.hashMessage(messageStr);
+  return messageHash;
 }
 
 async function generateMessages() {
@@ -141,14 +142,17 @@ async function generateMessages() {
 
   console.log(`Using test users:`, testUsers);
 
-  // Create multiple connections per user
   const connections: Connection[] = [];
 
   function createConnection(userId: number): Connection {
     const ws = new WebSocket(WEBSOCKET_URL);
+    // Create a random wallet for this connection
+    const wallet = Wallet.createRandom();
+
     const connection: Connection = {
       ws,
       userId,
+      wallet,
       isSubscribed: false,
       currentRoom: null,
     };
@@ -158,10 +162,10 @@ async function generateMessages() {
     });
 
     ws.on('message', (data) => {
-      const message = JSON.parse(data.toString()) as WSMessageOutput;
+      const message = JSON.parse(data.toString());
       console.log(`User ${userId} received message:`, message);
-      if (message.type === 'heartbeat') {
-        ws.send(JSON.stringify({ type: 'heartbeat' }));
+      if (message.type === WsMessageInputTypes.HEARTBEAT_INPUT) {
+        ws.send(JSON.stringify({ type: WsMessageInputTypes.HEARTBEAT_INPUT, content: {} }));
       }
     });
 
@@ -189,7 +193,7 @@ async function generateMessages() {
 
   // Periodically force some connections to reconnect
   setInterval(() => {
-    const numToReconnect = Math.floor(connections.length * 0.2); // Reconnect 20% of connections
+    const numToReconnect = Math.floor(connections.length * 0.2);
     const connectionsToReconnect = connections
       .sort(() => Math.random() - 0.5)
       .slice(0, numToReconnect);
@@ -211,15 +215,18 @@ async function generateMessages() {
 
         if (!roomAndRound) {
           if (connection.isSubscribed && connection.currentRoom) {
+            const content = {
+              roomId: connection.currentRoom.roomId,
+            };
+            const signature = await connection.wallet.signMessage(JSON.stringify(content));
+
             connection.ws.send(
               JSON.stringify({
-                type: 'unsubscribe_room',
-                author: connection.userId,
-                timestamp: Date.now(),
-                content: {
-                  roomId: connection.currentRoom.roomId,
-                },
-              } as WSMessageInput)
+                messageType: WsMessageInputTypes.SUBSCRIBE_ROOM_INPUT,
+                sender: connection.wallet.address,
+                signature,
+                content,
+              })
             );
             connection.isSubscribed = false;
             connection.currentRoom = null;
@@ -230,27 +237,33 @@ async function generateMessages() {
         // Subscribe if needed
         if (!connection.isSubscribed || connection.currentRoom?.roomId !== roomAndRound.roomId) {
           if (connection.currentRoom) {
+            const content = {
+              roomId: connection.currentRoom.roomId,
+            };
+            const signature = await connection.wallet.signMessage(JSON.stringify(content));
+
             connection.ws.send(
               JSON.stringify({
-                type: 'unsubscribe_room',
-                author: connection.userId,
-                timestamp: Date.now(),
-                content: {
-                  roomId: connection.currentRoom.roomId,
-                },
-              } as WSMessageInput)
+                messageType: WsMessageInputTypes.SUBSCRIBE_ROOM_INPUT,
+                sender: connection.wallet.address,
+                signature,
+                content,
+              })
             );
           }
 
+          const content = {
+            roomId: roomAndRound.roomId,
+          };
+          const signature = await connection.wallet.signMessage(JSON.stringify(content));
+
           connection.ws.send(
             JSON.stringify({
-              type: 'subscribe_room',
-              author: connection.userId,
-              timestamp: Date.now(),
-              content: {
-                roomId: roomAndRound.roomId,
-              },
-            } as WSMessageInput)
+              messageType: WsMessageInputTypes.SUBSCRIBE_ROOM_INPUT,
+              sender: connection.wallet.address,
+              signature,
+              content,
+            })
           );
 
           connection.isSubscribed = true;
@@ -265,90 +278,43 @@ async function generateMessages() {
       if (roomAndRound && connections.length > 0) {
         const activeConnection = connections[Math.floor(Math.random() * connections.length)];
         if (activeConnection.ws.readyState === WebSocket.OPEN) {
-          const rand = Math.random();
-          let message: WSMessageInput;
+          const rand = Math.random() * 0.6;
+          let message;
 
           if (rand < BAD_MESSAGE_PROBABILITY) {
-            message = generateBadMessage() as WSMessageInput;
-          } else if (rand < 0.15) {
-            // GM Action
-            message = {
-              type: WsMessageType.GM_ACTION,
-              author: activeConnection.userId,
-              timestamp: Date.now(),
-              content: {
-                roomId: roomAndRound.roomId,
-                roundId: roomAndRound.roundId,
-                gm_id: activeConnection.userId.toString(),
-                content: {
-                  text: getRandomGMAction(),
-                },
-                targets: [],
-                timestamp: Date.now(),
-              } satisfies GMMessageContent,
-            };
-          } else if (rand < 0.3) {
-            // PVP Action
-            const action = getRandomPVPAction();
-            message = {
-              type: WsMessageType.PVP_ACTION,
-              author: activeConnection.userId,
-              timestamp: Date.now(),
-              content: {
-                roomId: roomAndRound.roomId,
-                roundId: roomAndRound.roundId,
-                txHash: `0x${Math.random().toString(16).slice(2)}`,
-                instigator: activeConnection.userId.toString(),
-                actionType: action.type,
-                targets: [],
-                additionalData: {},
-              } satisfies PVPMessageContent,
-            };
+            message = generateBadMessage();
           } else if (rand < 0.4) {
-            // AI Chat
-            message = {
-              type: WsMessageType.AI_CHAT,
-              author: activeConnection.userId,
-              timestamp: Date.now(),
-              content: {
-                roomId: roomAndRound.roomId,
-                roundId: roomAndRound.roundId,
-                message_id: Date.now(),
-                actor: `0x${Math.random().toString(16).slice(2)}`,
-                sent: Date.now(),
-                content: {
-                  text: getRandomAIMessage(),
-                },
-                timestamp: Date.now(),
-                altered: false,
-              } satisfies AIChatContent,
+            // Public chat message
+            const content = {
+              roomId: roomAndRound.roomId,
+              roundId: roomAndRound.roundId,
+              userId: activeConnection.userId,
+              text: getRandomMessage(),
             };
+            const signature = await activeConnection.wallet.signMessage(JSON.stringify(content));
+
+            message = {
+              messageType: WsMessageInputTypes.PUBLIC_CHAT_INPUT,
+              sender: activeConnection.wallet.address,
+              signature,
+              content,
+            } satisfies z.infer<typeof publicChatMessageInputSchema>;
           } else if (rand < 0.5) {
             // Participants request
-            message = {
-              type: WsMessageType.PARTICIPANTS,
-              author: activeConnection.userId,
-              timestamp: Date.now(),
-              content: {
-                roomId: roomAndRound.roomId,
-              },
+            const content = {
+              roomId: roomAndRound.roomId,
             };
-          } else {
-            // Public Chat (default)
+
             message = {
-              type: WsMessageType.PUBLIC_CHAT,
-              author: activeConnection.userId,
-              timestamp: Date.now(),
-              content: {
-                roomId: roomAndRound.roomId,
-                roundId: roomAndRound.roundId,
-                text: getRandomMessage(),
-              },
-            };
+              type: WsMessageInputTypes.PARTICIPANTS_INPUT,
+              content,
+            } satisfies z.infer<typeof participantsInputMessageSchema>;
           }
 
-          activeConnection.ws.send(JSON.stringify(message));
-          console.log(`User ${activeConnection.userId} sent message:`, message);
+          if (message) {
+            activeConnection.ws.send(JSON.stringify(message));
+            console.log(`User ${activeConnection.userId} sent message:`, message);
+          }
         }
       }
 

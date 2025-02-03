@@ -19,6 +19,11 @@ export enum WsMessageInputTypes {
   // Sent by: Agents in room
   // Purpose: Send a message to the other agents in the room
   AGENT_MESSAGE_INPUT = 'agent_message',
+
+  // BELOW IS NOT YET IMPLEMENTED
+  // Sent by: ???
+  // Purpose: Send a GM message to agents, must be treated with the highest priority to ensure round progresses
+  GM_MESSAGE_INPUT = 'gm_action',
 }
 
 export enum WsMessageOutputTypes {

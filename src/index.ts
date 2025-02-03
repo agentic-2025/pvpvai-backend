@@ -12,7 +12,6 @@ const server = fastify({
   logger: true,
 });
 server.register(cors, {
-  // put your options here
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'HEAD', 'PATCH'],
   origin: '*',
 });
@@ -79,6 +78,11 @@ server.register(async function (fastify) {
           case WsMessageInputTypes.HEARTBEAT_INPUT:
             wsOps.handleHeartbeat(client);
             break;
+
+          case WsMessageInputTypes.GM_MESSAGE_INPUT:
+            await wsOps.handleGMChat(client, data);
+            break;
+
 
           default:
             wsOps.sendSystemMessage(

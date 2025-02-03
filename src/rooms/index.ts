@@ -14,20 +14,6 @@ export {
   RoundParticipantDB as RoundParticipant,
 } from '../types/roundTypes';
 
-// Export controllers
-export * from '../controllers/roomController';
-export * from '../controllers/roundController';
-
-// Export services
-export * from '../services/roomService';
-export * from '../services/roundService';
-
-// Export schemas
-export * from '../utils/schemas';
-
-// Export utilities
-export * from '../utils/messageHandler';
-export * from '../utils/pvpHandler';
 
 // Main routes registration
 export default async function registerRoomRoutes(

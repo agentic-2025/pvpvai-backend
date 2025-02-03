@@ -1,12 +1,6 @@
 import { WebSocket } from 'ws';
 import { z } from 'zod';
 import { supabase } from '../config';
-import {
-  participantsInputMessageSchema,
-  participantsOutputMessageSchema,
-  publicChatMessageInputSchema,
-  systemNotificationOutputSchema,
-} from '../rooms';
 import { Database } from '../types/database.types';
 import {
   HeartbeatOutputMessage,
@@ -15,7 +9,18 @@ import {
   WsMessageOutputTypes,
 } from '../types/ws';
 import { roundPreflight } from '../utils/validation';
-import { ClientInfo, HeartbeatMap, RoomMap } from './handlers';
+import {
+  participantsInputMessageSchema,
+  participantsOutputMessageSchema,
+  publicChatMessageInputSchema,
+  systemNotificationOutputSchema,
+} from '../utils/schemas';
+import { processGmMessage } from '../utils/messageHandler';
+
+export type RoomMap = Map<number, Set<WebSocket>>;
+export type ClientInfo = Map<WebSocket, { roomId: number }>;
+export type HeartbeatMap = Map<WebSocket, NodeJS.Timeout>;
+
 export class WSOperations {
   private rooms: RoomMap;
   private clientInfo: ClientInfo;
@@ -30,6 +35,7 @@ export class WSOperations {
     // Run cleanup every 5 minutes
     setInterval(() => this.syncParticipantCounts(), 5 * 60 * 1000);
   }
+
   async sendSystemMessage(
     client: WebSocket,
     text: string,
@@ -37,7 +43,7 @@ export class WSOperations {
     originalMessage?: any
   ) {
     const message: z.infer<typeof systemNotificationOutputSchema> = {
-      type: WsMessageOutputTypes.SYSTEM_NOTIFICATION_OUTPUT,
+      messageType: WsMessageOutputTypes.SYSTEM_NOTIFICATION_OUTPUT,
       content: {
         timestamp: Date.now(),
         text,
@@ -96,7 +102,7 @@ export class WSOperations {
   async broadcastParticipantsToRoom(params: { roomId: number; count: number }): Promise<void> {
     const { roomId, count } = params;
     const message: z.infer<typeof participantsOutputMessageSchema> = {
-      type: WsMessageOutputTypes.PARTICIPANTS_OUTPUT,
+      messageType: WsMessageOutputTypes.PARTICIPANTS_OUTPUT,
       content: {
         timestamp: Date.now(),
         roomId,
@@ -104,7 +110,7 @@ export class WSOperations {
       },
     };
 
-    this.sendMessageToRoom({
+    await this.sendMessageToRoom({
       roomId,
       message,
     });
@@ -142,6 +148,8 @@ export class WSOperations {
         );
       }
     });
+
+    await Promise.all(sendPromises);
   }
 
   async handlePublicChat(
@@ -155,7 +163,7 @@ export class WSOperations {
 
       const { round, valid, reason } = await roundPreflight(roundId);
       if (!valid) {
-        this.sendSystemMessage(client, reason, true, message);
+        await this.sendSystemMessage(client, reason, true, message);
         return;
       }
 
@@ -174,7 +182,7 @@ export class WSOperations {
       );
     } catch (error) {
       console.error(`Failed to handle public chat message:`, error);
-      this.sendSystemMessage(client, 'Failed to handle public chat message', true, message);
+      await this.sendSystemMessage(client, 'Failed to handle public chat message', true, message);
     }
   }
 
@@ -191,7 +199,7 @@ export class WSOperations {
       const count = connections?.size || 0;
 
       const response: z.infer<typeof participantsOutputMessageSchema> = {
-        type: WsMessageOutputTypes.PARTICIPANTS_OUTPUT,
+        messageType: WsMessageOutputTypes.PARTICIPANTS_OUTPUT,
         content: {
           timestamp: Date.now(),
           roomId,
@@ -201,7 +209,46 @@ export class WSOperations {
       client.send(JSON.stringify(response));
     } catch (error) {
       console.error(`Failed to handle participants message:`, error);
-      this.sendSystemMessage(client, 'Failed to handle participants message', true, message);
+      await this.sendSystemMessage(client, 'Failed to handle participants message', true, message);
+    }
+  }
+
+  //TODO have to fix message type
+  async handleGMChat(client: WebSocket, message: any): Promise<void> {
+    try {
+      const { roomId, roundId, content, gmId } = message.content;
+      const { text } = content;
+      if (!roomId || !roundId || !text || !gmId) {
+        throw new Error(
+          'Invalid GM Message, needs content.room_id, content.round_id, content.text, and content.gmId'
+        );
+      }
+      const { round, valid, reason } = await roundPreflight(roundId);
+      if (!valid) {
+        throw new Error('Round not valid: ' + reason);
+      }
+
+      const res = await processGmMessage(message);
+
+      // Broadcast to all participants concurrently
+      await this.broadcastToAiChat({
+        roomId,
+        record: {
+          round_id: roundId,
+          agent_id: gmId,
+          original_author: gmId, //TODO yep still not sure why I did this
+          message_type: message.type,
+          pvp_status_effects: null,
+          message,
+        },
+      });
+      console.log(
+        `Message from GM ${message.author} broadcasted to room #${message.content.roomId}`,
+        message
+      );
+    } catch (error) {
+      console.error(`Failed to handle GM chat message:`, error);
+      await this.sendSystemMessage(client, 'Failed to handle GM chat message', true, message);
     }
   }
 
@@ -209,7 +256,7 @@ export class WSOperations {
   async handleSubscribeRoom(client: WebSocket, message: SubscribeRoomInputMessage): Promise<void> {
     try {
       if (!message.content?.roomId) {
-        this.sendSystemMessage(client, 'Subscribe message needs content.room_id', true, message);
+        await this.sendSystemMessage(client, 'Subscribe message needs content.room_id', true, message);
         return;
       }
 
@@ -219,7 +266,7 @@ export class WSOperations {
       const { error } = await supabase.from('rooms').select('*').eq('id', roomId).single();
 
       if (error) {
-        this.sendSystemMessage(client, 'Room does not exist', true, message);
+        await this.sendSystemMessage(client, 'Room does not exist', true, message);
         return;
       }
 
@@ -244,10 +291,10 @@ export class WSOperations {
       }
 
       await this.sendSystemMessage(client, 'Subscribed to room', false, message);
-      this.broadcastParticipantsToRoom({ roomId: roomId, count: room.size });
+      await this.broadcastParticipantsToRoom({ roomId: roomId, count: room.size });
     } catch (error) {
       console.error(`Failed to handle subscribe room message:`, error);
-      this.sendSystemMessage(client, 'Failed to handle subscribe room message', true, message);
+      await this.sendSystemMessage(client, 'Failed to handle subscribe room message', true, message);
     }
   }
 
