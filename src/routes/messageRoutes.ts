@@ -24,14 +24,33 @@ export async function messagesRoutes(server: FastifyInstance) {
     Body: z.infer<typeof observationMessageInputSchema>;
     Reply: z.infer<typeof messagesRestResponseSchema>;
   }>(
-    '/messages/observations', //TODO move this to /rooms/:roomId/rounds/:roundId/observations
+    '/messages/observations',
     {
       schema: {
-        body: observationMessageInputSchema,
+        body: {
+          type: 'object',
+          required: ['roomId', 'roundId', 'observation'],
+          properties: {
+            roomId: { type: 'string' },
+            roundId: { type: 'string' },
+            observation: { type: 'string' },
+          },
+        },
         response: {
-          200: messagesRestResponseSchema,
-          400: messagesRestResponseSchema,
-          500: messagesRestResponseSchema,
+          200: {
+            type: 'object',
+            required: ['message', 'data', 'error'],
+            properties: {
+              message: { type: 'string' },
+              data: {
+                type: 'object',
+                additionalProperties: true,
+              },
+              error: {
+                type: ['string', 'null'],
+              },
+            },
+          },
         },
       },
     },
@@ -53,11 +72,30 @@ export async function messagesRoutes(server: FastifyInstance) {
     '/messages/agentMessage',
     {
       schema: {
-        body: agentMessageInputSchema,
+        body: {
+          type: 'object',
+          required: ['roomId', 'roundId', 'message'],
+          properties: {
+            roomId: { type: 'string' },
+            roundId: { type: 'string' },
+            message: { type: 'string' },
+          },
+        },
         response: {
-          200: messagesRestResponseSchema,
-          400: messagesRestResponseSchema,
-          500: messagesRestResponseSchema,
+          200: {
+            type: 'object',
+            required: ['message', 'data', 'error'],
+            properties: {
+              message: { type: 'string' },
+              data: {
+                type: 'object',
+                additionalProperties: true,
+              },
+              error: {
+                type: ['string', 'null'],
+              },
+            },
+          },
         },
       },
     },
