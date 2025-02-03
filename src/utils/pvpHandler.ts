@@ -1,4 +1,4 @@
-import { applyPvp } from "../../pvp";
+import { applyPvp } from '../pvp';
 
 export interface PvPResult {
   message: any | null;
@@ -25,18 +25,18 @@ export async function handlePvPEffects(
 ): Promise<PvPResult> {
   try {
     const pvpResult = await applyPvp(message, sourceAgentId, targetAgentIds);
-    
+
     return {
       message: pvpResult.message,
       targets: pvpResult.targets || targetAgentIds,
-      actions: pvpResult.actions || [] // Provide default empty array
+      actions: pvpResult.actions || [], // Provide default empty array
     };
   } catch (error) {
     console.error('Error applying PvP effects:', error);
     return {
       message: message,
       targets: targetAgentIds,
-      actions: [] // Provide default empty array in error case too
+      actions: [], // Provide default empty array in error case too
     };
   }
 }
@@ -51,9 +51,7 @@ export function getModifiedTargets(pvpResult: PvPResult, originalTargets: number
 
 // Helper functions for common PvP checks
 export function hasPvPEffect(actions: PvPAction[], type: string, target: number): boolean {
-  return actions?.some(action => 
-    action.type === type && action.target === target
-  ) || false;
+  return actions?.some((action) => action.type === type && action.target === target) || false;
 }
 
 export function isSilenced(actions: PvPAction[], agentId: number): boolean {

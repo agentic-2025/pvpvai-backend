@@ -1,6 +1,6 @@
-import { ObservationType } from '../rooms/routes/observationRoutes';
-import { RoundMessage } from '../rooms/validators/schemas';
-import { AllPvpActions, PvpActions, PvpStatusEffect } from './pvp';
+import { RoundMessage } from '../utils/schemas';
+import { AllPvpActions, PvpActions } from './pvp';
+
 export enum WsMessageInputTypes {
   // Sent by: Users in room
   // Purpose: Request to start receiving messages for a room
@@ -87,40 +87,13 @@ export interface SubscribeRoomInputMessage {
   };
 }
 
-export interface ParticipantsInputMessage {
-  type: WsMessageInputTypes.PARTICIPANTS_INPUT;
-  content: {
-    roomId: number;
-  };
-}
+
 
 export interface HeartbeatInputMessage {
   type: WsMessageInputTypes.HEARTBEAT_INPUT;
   content: {};
 }
 
-export interface PublicChatInputMessage extends AuthenticatedMessage {
-  type: WsMessageInputTypes.PUBLIC_CHAT_INPUT;
-  content: {
-    roomId: number;
-    roundId: number;
-    userId: number;
-    text: string;
-  };
-}
-
-export type AgentMessageInputMessage = RoundMessage;
-
-export interface PublicChatOutputMessage extends AuthenticatedMessage {
-  type: WsMessageOutputTypes.PUBLIC_CHAT_OUTPUT;
-  content: {
-    timestamp: number;
-    roomId: number; //Room id could be useful for player facing message since user subscribed to room, not round
-    roundId: number;
-    userId: number;
-    text: string;
-  };
-}
 
 export type HeartbeatOutputMessage = HeartbeatInputMessage; //Backend + user both use the same heartbeat message
 
@@ -136,26 +109,6 @@ export interface GMOutputMessage extends AuthenticatedMessage {
   };
 }
 
-export interface ParticipantsOutputMessage {
-  type: WsMessageOutputTypes.PARTICIPANTS_OUTPUT;
-  content: {
-    timestamp: number;
-    roomId: number;
-    count: number;
-  };
-}
-
-export interface SystemNotificationOutputMessage {
-  type: WsMessageOutputTypes.SYSTEM_NOTIFICATION_OUTPUT;
-  content: {
-    timestamp: number;
-    roomId?: number;
-    roundId?: number;
-    text: string;
-    error: boolean;
-    originalMessage?: any; // The original message that caused the notification to be sent
-  };
-}
 
 export interface ObservationWalletBalanceData {
   walletBalances: {
@@ -173,38 +126,6 @@ export interface ObservationPriceData {
       source: string;
       tokenPriceUsd: number;
     };
-  };
-}
-
-// Message is signed by GM. Agents must reject messages that are not signed by GM
-export interface AgentMessageOutputMessage extends AuthenticatedMessage {
-  type: WsMessageOutputTypes.AGENT_MESSAGE_OUTPUT;
-  content: {
-    timestamp: number;
-    messageId: number;
-    roomId: number; //Room id included here to provide agent w/ extended context + possible caching optimizations
-    roundId: number;
-    agentId: number;
-    agentRoomAddress: string;
-    text: string;
-  };
-}
-
-export type ObservationOutputMessage = ObservationMessageInputMessage;
-
-// This message is sent to players in the room, it exposes the PvP actions that were taken on the message
-export interface AiChatAgentMessageOutputMessage {
-  type: WsMessageOutputTypes.AI_CHAT_AGENT_MESSAGE_OUTPUT;
-  content: {
-    timestamp: number;
-    roomId: number; //Room id could be useful for player facing message since user subscribed to room, not round
-    roundId: number;
-    senderId: number;
-    originalMessages: { agentId: number; message: any }[];
-    postPvpMessages: { agentId: number; message: any }[];
-    //TODO Need to implement JSON schema to type pvpStatusEffects: https://supabase.com/docs/guides/database/json#validating-json-data
-    pvpStatusEffects: { [agentId: string]: [PvpStatusEffect] };
-    // pvpStatusEffects: { [agentId: string]: [PvpStatusEffect] };
   };
 }
 
@@ -234,11 +155,6 @@ export interface AiChatPvpStatusRemovedOutputMessage {
 }
 
 export type WsRoomLevelOutputTypes =
-  | ParticipantsOutputMessage
-  | PublicChatOutputMessage
   | GMOutputMessage
-  | SystemNotificationOutputMessage
-  | AiChatAgentMessageOutputMessage
   | AiChatPvpStatusAppliedOutputMessage
   | AiChatPvpStatusRemovedOutputMessage
-  | ObservationOutputMessage;

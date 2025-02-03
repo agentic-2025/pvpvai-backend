@@ -1,3 +1,4 @@
+import cors from '@fastify/cors';
 import websocket from '@fastify/websocket';
 import fastify from 'fastify';
 import agentsRoutes from './agents';
@@ -5,7 +6,7 @@ import { wsOps } from './config';
 import { signatureVerificationPlugin } from './middleware/signatureVerification';
 import zodSchemaPlugin from './plugins/zodSchema';
 import roomsRoutes from './rooms';
-import cors from '@fastify/cors';
+import { WsMessageInputTypes } from './types/ws';
 
 const server = fastify({
   logger: true,
@@ -13,7 +14,7 @@ const server = fastify({
 server.register(cors, {
   // put your options here
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'HEAD', 'PATCH'],
-  origin: "*"
+  origin: '*',
 });
 
 // Register Zod validation
@@ -63,21 +64,30 @@ server.register(async function (fastify) {
         const data = JSON.parse(message.toString());
 
         switch (data.type) {
-          case 'subscribe_room':
+          case WsMessageInputTypes.SUBSCRIBE_ROOM_INPUT:
             wsOps.handleSubscribeRoom(client, data);
             break;
 
-          case 'unsubscribe_room':
-            wsOps.handleUnsubscribeRoom(client); //N
+          case WsMessageInputTypes.PARTICIPANTS_INPUT:
+            wsOps.handleParticipants(client, data);
             break;
 
-          case 'public_chat':
+          case WsMessageInputTypes.PUBLIC_CHAT_INPUT:
             await wsOps.handlePublicChat(client, data);
             break;
 
-          case 'heartbeat':
+          case WsMessageInputTypes.HEARTBEAT_INPUT:
             wsOps.handleHeartbeat(client);
             break;
+
+          default:
+            wsOps.sendSystemMessage(
+              client,
+              'Invalid message type, please pass a supported message type:' +
+                Object.values(WsMessageInputTypes).join(', '),
+              true,
+              data
+            );
         }
       } catch (err) {
         client.send(

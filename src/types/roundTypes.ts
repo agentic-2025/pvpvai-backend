@@ -1,4 +1,4 @@
-import { Database } from '../../types/database.types';
+import { Database, Tables } from './database.types';
 
 // Use type aliases instead of interfaces for database types
 export type RoundDataDB = Database['public']['Tables']['rounds']['Row'];
@@ -9,15 +9,13 @@ export type RoundParticipantDB = Database['public']['Tables']['round_agents']['R
     character_card: string | null;
   };
 };
-export type RoundMessageDB = Database['public']['Tables']['round_agent_messages']['Row'] & {
+
+// TODO Might not be needed, round_agent_messages is for rendering AI chat,
+// can have a type specific for sending a message to another agent (see agentMessageOutputSchema in schemas.ts, that's the type being sent to agents now)
+export type RoundMessageDB = Tables<'round_agent_messages'> & {
   agents?: {
     display_name: string;
     character_card: string | null;
-  };
-};
-export type GMActionDB = Database['public']['Tables']['round_gm_messages']['Row'] & {
-  game_masters?: {
-    display_name: string | null;
   };
 };
 

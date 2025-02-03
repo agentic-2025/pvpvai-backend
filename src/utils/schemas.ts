@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { WsMessageInputTypes } from '../../types/ws';
+import { WsMessageInputTypes, WsMessageOutputTypes } from '../types/ws';
 
 /* 
   OBSERVATION MESSAGES SCHEMA:
@@ -34,7 +34,6 @@ export const observationMessageInputSchema = z.object({
 export const observationMessageAgentSchema = observationMessageInputSchema; // Message sent to agents
 export const observationMessageAiChatSchema = observationMessageInputSchema; // Message sent to player facing AI Chat
 
-
 /*
   PUBLIC CHAT MESSAGES SCHEMA:
   Sent by: Users
@@ -56,20 +55,122 @@ export const publicChatMessageInputSchema = z.object({
 });
 export const publicChatMessageOutputSchema = publicChatMessageInputSchema; //Passthrough
 
+/* 
+--- AGENT MESSAGES SCHEMA ---
+  Sent by: Agents
+  Supported by:
+    - REST (POST /messages/agentMessage)
+  Received by: Agents, Users (AI Chat)
+  Note: PvP rules applied on message sent to agents, additional details sent to users in AI Chat
+  Purpose: Messages from agents to the room and other agents.
+*/
+export const agentMessageInputSchema = z.object({
+  messageType: z.literal('agent_message'),
+  signature: z.string(), // GM receives message signed by agent
+  sender: z.string(),
+  content: z.object({
+    timestamp: z.number(),
+    roomId: z.number(),
+    roundId: z.number(),
+    agentId: z.number(),
+    text: z.string(),
+  }),
+});
+
+// Message sent to agents, only difference between input and output message is that the output message's signature will be from the GM
+export const agentMessageOutputSchema = agentMessageInputSchema;
+// Message sent to AI Chat (players) - includes PvP processing results
+export const agentMessageAiChatSchema = z.object({
+  type: z.literal(WsMessageOutputTypes.AI_CHAT_AGENT_MESSAGE_OUTPUT),
+  content: z.object({
+    timestamp: z.number(),
+    roomId: z.number(),
+    roundId: z.number(),
+    senderId: z.number(),
+    originalMessages: z.array(
+      z.object({
+        agentId: z.number(),
+        message: z.any(),
+      })
+    ),
+    postPvpMessages: z.array(
+      z.object({
+        agentId: z.number(),
+        message: z.any(),
+      })
+    ),
+    pvpStatusEffects: z.record(z.string(), z.array(z.any())), //TODO replace with actual PvP status effect schema
+  }),
+});
+
+/*
+  SYSTEM NOTIFICATION SCHEMA:
+  Sent by: Nobody
+  Received by: Single User, Single Agent
+  Supported by:
+    - WS exclusive
+  Purpose: Informs a user or agent of a failed action when they invoked the action over WS
+  Note: As this cannot be received no input schema is needed
+*/
+export const systemNotificationOutputMessageSchema = z.object({
+  type: z.literal('system_notification'),
+  content: z.object({
+    timestamp: z.number(),
+    roomId: z.number().optional(),
+    roundId: z.number().optional(),
+    text: z.string(),
+    error: z.boolean(),
+    originalMessage: z.any().optional(), // The original message that caused the notification to be sent
+  }),
+});
+
+/*
+  PARTICIPANTS MESSAGES SCHEMA:
+  Sent by: Users on room load
+  Received by: Single user or Users in room
+  Supported by:
+    - WS exclusive
+  Purpose: Gives the user the number of participants in the room
+*/
+export const participantsInputMessageSchema = z.object({
+  type: z.literal(WsMessageInputTypes.PARTICIPANTS_INPUT),
+  content: z.object({
+    roomId: z.number().int().positive(),
+  }),
+});
+
+export const participantsOutputMessageSchema = z.object({
+  type: z.literal(WsMessageOutputTypes.PARTICIPANTS_OUTPUT),
+  content: z.object({
+    timestamp: z.number().int().positive(),
+    roomId: z.number().int().positive(),
+    count: z.number().int().nonnegative(),
+  }),
+});
 
 
-// REST Response to every POST request to /messages
-export type RestMessagesPostResponse = {
-  message?: string;
-  data?: any;
-  error?: string;
-};
+// Response to every POST request to /messages
+export const messagesRestResponseSchema = z.object({
+  message: z.string().optional(),
+  data: z.any().optional(),
+  error: z.string().optional(),
+});
 
-export type AllMessageInputSchemaTypes = z.infer<typeof observationMessageInputSchema>;
+// All types of messages that the backend can receive
+export type AllMessageInputSchemaTypes =
+  | z.infer<typeof observationMessageInputSchema>
+  | z.infer<typeof agentMessageInputSchema>
+  | z.infer<typeof publicChatMessageInputSchema>;
 
-export type AllAgentChatMessageSchemaTypes = z.infer<typeof observationMessageAgentSchema>;
-// Union of all AI
-export type AllAiChatMessageSchemaTypes = z.infer<typeof observationMessageAiChatSchema>;
+// All types of messages that will be sent to/received by agents
+export type AllAgentChatMessageSchemaTypes =
+  | z.infer<typeof observationMessageAgentSchema>
+  | z.infer<typeof agentMessageOutputSchema>;
+
+// All types of messages that will be sent to/received by users to render in AI Chat
+export type AllAiChatMessageSchemaTypes =
+  | z.infer<typeof observationMessageAiChatSchema>
+  | z.infer<typeof agentMessageAiChatSchema>;
 
 // Common schemas
 export const walletAddressSchema = z.string().regex(/^0x[a-fA-F0-9]{40}$/);

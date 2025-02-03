@@ -1,13 +1,13 @@
 import { FastifyInstance } from 'fastify';
 import { roomController } from '../controllers/roomController';
 import {
-  roomSetupSchema,
   agentAddSchema,
   agentBulkAddSchema,
-  RoomSetup,
   RoomAgentAdd,
-  RoomAgentBulkAdd
-} from '../validators/schemas';
+  RoomAgentBulkAdd,
+  RoomSetup,
+  roomSetupSchema,
+} from '../utils/schemas';
 
 export async function roomRoutes(server: FastifyInstance) {
   // Setup new room
@@ -15,8 +15,8 @@ export async function roomRoutes(server: FastifyInstance) {
     '/setup',
     {
       schema: {
-        body: roomSetupSchema
-      }
+        body: roomSetupSchema,
+      },
     },
     async (request, reply) => {
       const result = await roomController.setupRoom(request.body);
@@ -40,10 +40,10 @@ export async function roomRoutes(server: FastifyInstance) {
           type: 'object',
           required: ['roomId'],
           properties: {
-            roomId: { type: 'string', pattern: '^[0-9]+$' }
-          }
-        }
-      }
+            roomId: { type: 'string', pattern: '^[0-9]+$' },
+          },
+        },
+      },
     },
     async (request, reply) => {
       const roomId = parseInt(request.params.roomId);
@@ -68,10 +68,10 @@ export async function roomRoutes(server: FastifyInstance) {
           type: 'object',
           required: ['roomId'],
           properties: {
-            roomId: { type: 'string', pattern: '^[0-9]+$' }
-          }
-        }
-      }
+            roomId: { type: 'string', pattern: '^[0-9]+$' },
+          },
+        },
+      },
     },
     async (request, reply) => {
       const roomId = parseInt(request.params.roomId);

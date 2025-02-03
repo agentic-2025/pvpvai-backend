@@ -1,7 +1,5 @@
 import { RoomService } from '../services/roomService';
-import { RoomSetupData, RoomOperationResult, DBRoom, DBRoomAgent } from '../types/roomTypes';
-import { applyPvp } from '../../pvp';
-import { wsOps } from '../../config';
+import { DBRoomAgent, RoomOperationResult, RoomSetupData } from '../types/roomTypes';
 
 // Initialize service instance
 const roomService = new RoomService();
@@ -19,7 +17,7 @@ export class RoomController {
         image_url: setupData.image_url,
         creator_id: 1, // TODO: Get from auth
         room_config: setupData.room_config,
-        active: true
+        active: true,
       };
 
       const roomResult = await roomService.createRoom(roomData);
@@ -41,7 +39,7 @@ export class RoomController {
 
       return {
         success: true,
-        data: { roomId: room.id }
+        data: { roomId: room.id },
       };
     } catch (err) {
       console.error('Error in room setup:', err);
@@ -67,7 +65,10 @@ export class RoomController {
     return await roomService.addAgentToRoom(roomId, agentId);
   }
 
-  async bulkAddAgentsToRoom(roomId: number, agentIds: number[]): Promise<RoomOperationResult<DBRoomAgent[]>> {
+  async bulkAddAgentsToRoom(
+    roomId: number,
+    agentIds: number[]
+  ): Promise<RoomOperationResult<DBRoomAgent[]>> {
     // Validate room exists and is active
     const roomResult = await roomService.findRoomById(roomId);
     if (!roomResult.success || !roomResult.data) {

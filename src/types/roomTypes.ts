@@ -1,5 +1,5 @@
 // src/rooms/types/roomTypes.ts
-import { Database } from '../../types/database.types';
+import { Database } from './database.types';
 
 export interface RoomSetupData {
   name: string;
@@ -16,7 +16,7 @@ export interface RoomSetupData {
   transaction_hash: string;
 }
 
-export interface RoomResponse { 
+export interface RoomResponse {
   success: boolean;
   roomId?: number;
   error?: string;
@@ -34,7 +34,7 @@ export type RoomAgentBulkAddRequest = {
 export interface MessageRequest {
   agent_id: number;
   timestamp: number;
-  signature: string; 
+  signature: string;
   content: any;
 }
 

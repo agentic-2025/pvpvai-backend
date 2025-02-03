@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { Wallet } from 'ethers';
 import { Database } from './types/database.types';
-import { WSOperations } from './ws/operations';
+import { WSOperations } from './ws/lib';
 
 // Initialize Supabase client
 const supabaseUrl = process.env.SUPABASE_URL || '';

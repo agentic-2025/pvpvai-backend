@@ -1,6 +1,6 @@
 import { PostgrestError } from '@supabase/supabase-js';
-import { supabase } from '../../config';
-import { Database, Tables } from '../../types/database.types';
+import { supabase } from '../config';
+import { Database, Tables } from '../types/database.types';
 import { RoomOperationResult } from '../types/roomTypes';
 import { RoundDataDB as RoundData, RoundMessageDB as RoundMessage } from '../types/roundTypes';
 
@@ -51,7 +51,9 @@ export class RoundService {
       const { data: storedMessage, error } = await supabase
         .from('round_agent_messages')
         .insert(messageData)
-        .select('*, agents(display_name, character_card)')
+        //TODO: (ad0ll) not actually sure if this select is right,
+        // I changed it from agents(display_name, character_card) to agents!round_agent_messages_agent_id_fkey(display_name, character_card) to get past a type error
+        .select('*, agents!round_agent_messages_agent_id_fkey(display_name, character_card)') // Specify the foreign key relationship
         .single();
 
       if (error) {
@@ -184,7 +186,9 @@ export class RoundService {
     }
   }
 
-  async getRound(roundId: number): Promise<{data: Tables<'rounds'> | null, error: PostgrestError | null}> {
+  async getRound(
+    roundId: number
+  ): Promise<{ data: Tables<'rounds'> | null; error: PostgrestError | null }> {
     const { data, error } = await supabase.from('rounds').select('*').eq('id', roundId).single();
     return { data, error };
   }
