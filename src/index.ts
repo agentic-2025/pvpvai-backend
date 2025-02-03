@@ -1,3 +1,4 @@
+import cors from '@fastify/cors';
 import websocket from '@fastify/websocket';
 import fastify from 'fastify';
 import agentsRoutes from './agents';
@@ -6,9 +7,12 @@ import { signatureVerificationPlugin } from './middleware/signatureVerification'
 import zodSchemaPlugin from './plugins/zodSchema';
 import roomsRoutes from './rooms';
 import { WSMessageInput, WsMessageType } from './types/ws';
-
 const server = fastify({
   logger: true,
+});
+server.register(cors, {
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'HEAD', 'PATCH'],
 });
 
 // Register Zod validation
