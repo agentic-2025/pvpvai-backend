@@ -5,9 +5,15 @@ import { wsOps } from './config';
 import { signatureVerificationPlugin } from './middleware/signatureVerification';
 import zodSchemaPlugin from './plugins/zodSchema';
 import roomsRoutes from './rooms';
+import cors from '@fastify/cors';
 
 const server = fastify({
   logger: true,
+});
+server.register(cors, {
+  // put your options here
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'HEAD', 'PATCH'],
+  origin: "*"
 });
 
 // Register Zod validation
