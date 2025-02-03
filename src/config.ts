@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
+import { Wallet } from 'ethers';
 import { Database } from './types/database.types';
 import { WSOperations } from './ws/operations';
-import { Wallet } from 'ethers';
 
 // Initialize Supabase client
 const supabaseUrl = process.env.SUPABASE_URL || '';
@@ -24,4 +24,4 @@ if (!SIGNER_PRIVATE_KEY) {
   throw new Error('SIGNER_PRIVATE_KEY environment variable is required');
 }
 
- export const etherSigningWallet = new Wallet(SIGNER_PRIVATE_KEY);
+export const backendEthersSigningWallet = new Wallet(SIGNER_PRIVATE_KEY);

@@ -9,57 +9,8 @@ export class RoundController {
     return await roundService.getOrCreateActiveRound(roomId);
   }
 
-  
-  async processAgentMessage(
-    roomId: number,
-    roundId: number,
-    agentId: number,
-    message: any,
-    timestamp: number,
-    signature: string
-  ): Promise<RoomOperationResult<void>> {
-    try {
-      // Store original message
-      const messageResult = await roundService.storeRoundMessage(roundId, agentId, message);
-      if (!messageResult.success || !messageResult.data) {
-        return { success: false, error: 'Failed to store message' };
-      }
-
-      // Apply PvP rules
-      const { message: modifiedMessage, targets } = await applyPvp(message,
-        agentId,
-        [] // Target agents will be determined by PvP rules
-      );
-
-      if (!modifiedMessage) {
-        return { success: true }; // Message blocked by PvP
-      }
-
-      // Broadcast to WebSocket clients
-      const wsMessage: WSMessageOutput = {
-        type: WsMessageType.AI_CHAT,
-        timestamp,
-        signature,
-        content: {
-          roomId,
-          roundId,
-          messageId: messageResult.data.id,
-          actor: agentId.toString(),
-          sent: timestamp,
-          content: modifiedMessage,
-          timestamp,
-          altered: message !== modifiedMessage,
-        } as AIChatContent,
-      };
-
-      await wsOps.broadcastToRoom(roomId, wsMessage);
-
-      return { success: true };
-    } catch (err) {
-      console.error('Error processing agent message:', err);
-      return { success: false, error: 'Failed to process message' };
-    }
-  }
+  // the body of processAgentMessage was moved to roundController.ts since, currently, agent messages only come in over REST
+  // can move that functionality back to a common method later when/if we support agent sending message over WS
 
   async endRound(roundId: number, outcome?: any): Promise<RoomOperationResult<void>> {
     return await roundService.endRound(roundId, outcome);

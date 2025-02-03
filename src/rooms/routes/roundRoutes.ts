@@ -9,13 +9,15 @@ import {
   KickParticipant,
   roundMessageInputSchema
 } from '../validators/schemas';
-import { agentPreflight, roundPreflight, sendMessageToAgent } from '../utils/messageHandler';
+import { sendMessageToAgent } from '../utils/messageHandler';
+import { agentPreflight } from '../utils/validation';
+import { roundPreflight } from '../utils/validation';
 import { applyPvp } from '../../pvp';
 import axios from 'axios';
 import { supabase, wsOps } from '../../config';
 import { AiChatAgentMessageOutputMessage, WsMessageOutputTypes } from '../../types/ws';
-import { etherSigningWallet } from '../../config';
-import { signMessage } from '../utils/authHandler';
+import { backendEthersSigningWallet } from '../../config';
+import { signMessage } from '../utils/validation';
 import { PvpStatusEffect } from '../../types/pvp';
 
 export async function roundRoutes(server: FastifyInstance) {
@@ -77,15 +79,16 @@ export async function roundRoutes(server: FastifyInstance) {
 
       //Step 3: Send messages
       const content = {
-          roomId,
-          roundId,
-          senderId: agentId,
-          originalMessages: prePvpMessages.map((message) => ({agentId: message.agentId, message: message.message})),
-          postPvpMessages: postPvpMessages.map((message) => ({agentId: message.agentId, message: message.message})),
+        timestamp: Date.now(),
+        roomId,
+        roundId,
+        senderId: agentId,
+        originalMessages: prePvpMessages.map((message) => ({agentId: message.agentId, message: message.message})),
+        postPvpMessages: postPvpMessages.map((message) => ({agentId: message.agentId, message: message.message})),
           pvpStatusEffects: round?.pvp_status_effects as { [agentId: string]: [PvpStatusEffect] },
         }
 
-      const {timestamp, signature} = await signMessage(etherSigningWallet, WsMessageOutputTypes.AI_CHAT_AGENT_MESSAGE_OUTPUT, content)
+      const {timestamp, signature} = await signMessage(backendEthersSigningWallet, WsMessageOutputTypes.AI_CHAT_AGENT_MESSAGE_OUTPUT, content)
 
       //Step 4: Send messages to agents
       for(const message of postPvpMessages) {

@@ -1,5 +1,6 @@
+import { PostgrestError } from '@supabase/supabase-js';
 import { supabase } from '../../config';
-import { Database } from '../../types/database.types';
+import { Database, Tables } from '../../types/database.types';
 import { RoomOperationResult } from '../types/roomTypes';
 import { RoundDataDB as RoundData, RoundMessageDB as RoundMessage } from '../types/roundTypes';
 
@@ -182,8 +183,11 @@ export class RoundService {
       if (insertError) throw insertError;
     }
   }
+
+  async getRound(roundId: number): Promise<{data: Tables<'rounds'> | null, error: PostgrestError | null}> {
+    const { data, error } = await supabase.from('rounds').select('*').eq('id', roundId).single();
+    return { data, error };
+  }
 }
-
-
 
 export const roundService = new RoundService();

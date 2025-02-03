@@ -122,6 +122,7 @@ export type Database = {
       room_agents: {
         Row: {
           agent_id: number
+          agent_type: string | null
           created_at: string
           id: number
           room_id: number
@@ -131,6 +132,7 @@ export type Database = {
         }
         Insert: {
           agent_id: number
+          agent_type?: string | null
           created_at?: string
           id?: number
           room_id: number
@@ -140,6 +142,7 @@ export type Database = {
         }
         Update: {
           agent_id?: number
+          agent_type?: string | null
           created_at?: string
           id?: number
           room_id?: number
@@ -286,7 +289,7 @@ export type Database = {
           id: number
           message: Json
           message_type: string | null
-          post_pvp_message: string | null
+          original_author: number | null
           pvp_status_effects: Json | null
           round_id: number
           updated_at: string
@@ -297,7 +300,7 @@ export type Database = {
           id?: number
           message: Json
           message_type?: string | null
-          post_pvp_message?: string | null
+          original_author?: number | null
           pvp_status_effects?: Json | null
           round_id: number
           updated_at?: string
@@ -308,7 +311,7 @@ export type Database = {
           id?: number
           message?: Json
           message_type?: string | null
-          post_pvp_message?: string | null
+          original_author?: number | null
           pvp_status_effects?: Json | null
           round_id?: number
           updated_at?: string
@@ -317,6 +320,13 @@ export type Database = {
           {
             foreignKeyName: "round_agent_messages_agent_id_fkey"
             columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "round_agent_messages_original_author_fkey"
+            columns: ["original_author"]
             isOneToOne: false
             referencedRelation: "agents"
             referencedColumns: ["id"]

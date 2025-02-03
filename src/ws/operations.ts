@@ -11,7 +11,7 @@ import {
   WsMessageOutputTypes,
   WsRoomLevelOutputTypes,
 } from '../types/ws';
-
+import { Tables } from '../types/database.types';
 // Types for room management
 type RoomMap = Map<number, Set<WebSocket>>;
 type ClientInfo = Map<WebSocket, { roomId: number }>;
@@ -49,16 +49,72 @@ export class WSOperations {
     };
     client.send(JSON.stringify(message));
   }
-  //TODO Add retry logic
-  async broadcastToRoom(
+
+  async broadcastToPublicChat(params: {
     roomId: number,
-    message: WsRoomLevelOutputTypes,
+    message: Tables<'round_user_messages'>,
     excludeConnection?: WebSocket
-  ): Promise<void> {
+  }): Promise<void> {
+    const { roomId, message, excludeConnection } = params;
+
+    // First insert the message into the database
+    const { error } = await supabase
+      .from('round_user_messages')
+      .insert(message);
+
+    if (error) {
+      console.error('Failed to insert message into round_user_messages:', error);
+      return;
+    }
+
+    // Then broadcast to room participants
     const room = this.rooms.get(roomId);
     if (!room) return;
 
-    const messageString = JSON.stringify(message);
+    const messageString = JSON.stringify(message.message);
+    const sendPromises: Promise<void>[] = [];
+
+    room.forEach((client) => {
+      if (client !== excludeConnection && client.readyState === WebSocket.OPEN) {
+        sendPromises.push(
+          new Promise<void>((resolve, reject) => {
+            console.log(`Sending public chat message to client in room ${roomId}:`, messageString);
+            client.send(messageString, (err: any) => {
+              if (err) reject(err);
+              else resolve();
+            });
+          }).catch((err) => {
+            console.error(`Failed to send public chat message to client in room ${roomId}:`, err);
+          })
+        );
+      }
+    });
+
+    await Promise.all(sendPromises);
+  }
+
+  //TODO Add retry logic
+  async broadcastToAiChat(params: {
+    roomId: number,
+    record: Tables<'round_agent_messages'>,
+    excludeConnection?: WebSocket
+  }): Promise<void> {
+    const { roomId, record, excludeConnection } = params;
+
+    // First insert the message into the database
+    const { error } = await supabase
+      .from('round_agent_messages')
+      .insert(record);
+
+    if (error) {
+      console.error('Failed to insert message into round_agent_messages:', error);
+    }
+
+    // Then broadcast to room participants
+    const room = this.rooms.get(roomId);
+    if (!room) return;
+
+    const messageString = JSON.stringify(record.message);
     const sendPromises: Promise<void>[] = [];
 
     room.forEach((client) => {
@@ -130,7 +186,7 @@ export class WSOperations {
     }
 
     // Broadcast to all participants concurrently
-    await this.broadcastToRoom(roundData.room_id, message, client);
+    await this.broadcastToAiChat(roundData.room_id, message, client);
     console.log(
       `Message #${data.id} from user ${userId} (${message.sender}) broadcasted to room #${roundData.room_id}`
     );
@@ -144,10 +200,11 @@ export class WSOperations {
     const connections = this.rooms.get(roomId);
     const count = connections?.size || 0;
 
-    await this.broadcastToRoom(roomId, {
+    await this.broadcastToAiChat(roomId, {
       type: WsMessageOutputTypes.PARTICIPANTS_OUTPUT,
       timestamp: Date.now(),
       content: {
+        timestamp: Date.now(),
         roomId,
         count,
       },
@@ -192,7 +249,10 @@ export class WSOperations {
     }
 
     // Broadcast new participant count
-    await this.broadcastToRoom(roomId, {
+    await this.broadcastToAiChat(roomId, {
+      agent_id: :, 
+      
+      {
       type: WsMessageOutputTypes.PARTICIPANTS_OUTPUT,
       timestamp: Date.now(),
       content: {
@@ -235,7 +295,7 @@ export class WSOperations {
     }
 
     // Broadcast new participant count
-    await this.broadcastToRoom(roomId, {
+    await this.broadcastToAiChat(roomId, {
       type: WsMessageOutputTypes.PARTICIPANTS_OUTPUT,
       timestamp: Date.now(),
       content: {

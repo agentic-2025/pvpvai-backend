@@ -1,6 +1,5 @@
-// Single use actions
 export enum PvpActions {
-  // Direct actions
+  // Direct/single use actions
   ATTACK = 'ATTACK', // Player sends direct DM to agent
   AMNESIA = 'AMNESIA', //Agent deletes short term memory
   MURDER = 'MURDER', // Kick an agent from the room
@@ -12,7 +11,7 @@ export enum PvpActions {
   BLIND = 'BLIND', // Agent stops receiving observations
   DECEIVE = 'DECEIVE', // Agent temporarily takes on another persona
   MIND_CONTROL = 'MIND_CONTROL', // All messages sent from a player in public chat will be forwarded to other agents as a given agent
-  FRENZY = 'FRENZY', // Dump public chat into AI Chat
+  FRENZY = 'FRENZY', // Dump N messages from public chat into AI Chat
   OVERLOAD = 'OVERLOAD', // Messages will only be received by agent in stacks of 5
   CLAIRVOYANCE = 'CLAIRVOYANCE', // Agent will become aware of when a message has been modified by PvP Actions
   CHARM = 'CHARM', // All messages from another agent will be given the highest trust score

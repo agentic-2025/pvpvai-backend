@@ -8,29 +8,31 @@ export enum WsMessageInputTypes {
   // Sent by: Users in room
   // Purpose: Send a message to the public chat
   PUBLIC_CHAT_INPUT = 'public_chat',
-  // Sent by: Users
+  // Sent by: Single user
   // Purpose: Response to a health check from the WS Server
   HEARTBEAT_INPUT = 'heartbeat',
-  // Sent by: Users
+  // Sent by: Single user
   // Purpose: Get the total number of participants in the room to display in the UI
   PARTICIPANTS_INPUT = 'participants',
+
+  // BELOW IS NOT YET IMPLEMENTED
   // Sent by: Agents in room
   // Purpose: Send a message to the other agents in the room
   AGENT_MESSAGE_INPUT = 'agent_message',
 }
 
 export enum WsMessageOutputTypes {
-  // Response to: PUBLIC_CHAT_INPUT
+  // Response to: PUBLIC_CHAT_INPUT WS message input type
   // Recipients: Users
   // Purpose: Send a message received from PUBLIC_CHAT_INPUT to all users in the room
   PUBLIC_CHAT_OUTPUT = 'public_chat',
 
-  // Response to: None
+  // Response to: None (background process periodically health checks connected users)
   // Recipients: Single user
   // Purpose: Health check on a user in the room
   HEARTBEAT_OUTPUT = 'heartbeat',
 
-  // Response to: "participants" WS message input type, also sent when connections are added or removed in room
+  // Response to: PARTICIPANTS_INPUT WS message input type, also sent when connections are added or removed in room
   // Recipients: Single user
   // Purpose: Send the number of participants in the room to a single user, used solely to keep the UI updated
   PARTICIPANTS_OUTPUT = 'participants', // payload containing the number of participants in the room
@@ -41,23 +43,23 @@ export enum WsMessageOutputTypes {
   // Dual purpose: Message is relayed to AI Chat to inform subscribed users
   GM_ACTION_OUTPUT = 'gm_action',
 
-  // Response to: Any input message
+  // Response to: Any WS input message
   // Recipients: Single user
   // Purpose: Send a message to an individual user to inform them of something, typically used to notify of a failed action they took or a system error
   SYSTEM_NOTIFICATION_OUTPUT = 'system_notification',
 
-  // Response to: POST request to /observations
-  // Recipients: Agents, Users
+  // Response to: POST request to /rooms/:roomId/rounds/:roundId/observations
+  // Recipients: Users
   // Purpose: Send an observation to all agents in the room
   // Dual purpose: Message is relayed to AI Chat to inform subscribed users of an observation presented to the agents
   OBSERVATION_OUTPUT = 'observation', // Sent to all users in room and all agents.Render in AI Chat. Message relating to an observation from external data
 
-  // Response to: AGENT_MESSAGE_INPUT
+  // Response to: AGENT_MESSAGE_INPUT, POST /rooms/:roomId/rounds/:roundId/aiChat
   // Recipients: Agents
   // Purpose: Send a message received from AGENT_MESSAGE_INPUT to all other agents in the round. Intentionally contains no details about PvP actions.
   AGENT_MESSAGE_OUTPUT = 'agent_message',
 
-  // Response to: AGENT_MESSAGE_INPUT
+  // Response to: AGENT_MESSAGE_INPUT, POST /rooms/:roomId/rounds/:roundId/aiChat
   // Recipients: Users
   // Purpose: Send a message received from AGENT_MESSAGE_INPUT to all users in the room, message will contain details about what PvP actions were taken on the message
   AI_CHAT_AGENT_MESSAGE_OUTPUT = 'ai_chat_agent_message',
@@ -74,7 +76,6 @@ export enum WsMessageOutputTypes {
 }
 
 export interface AuthenticatedMessage {
-  timestamp: number; //Timestamp used to prevent replay attacks, optional for right now until we implement signature auth across the board.
   signature: string; //Signature of the content and timestamp. Optional for right now until we implement signature auth across the board.
   sender: string; //Address of the sender, must match signature. Optional for right now until we implement signature auth across the board.
 }
@@ -101,6 +102,7 @@ export interface HeartbeatInputMessage {
 export interface PublicChatInputMessage extends AuthenticatedMessage {
   type: WsMessageInputTypes.PUBLIC_CHAT_INPUT;
   content: {
+    roomId: number;
     roundId: number;
     userId: number;
     text: string;
@@ -109,13 +111,23 @@ export interface PublicChatInputMessage extends AuthenticatedMessage {
 
 export type AgentMessageInputMessage = RoundMessage;
 
-export type PublicChatOutputMessage = PublicChatInputMessage; //Public chat is a straight pass through of the input message
+export interface PublicChatOutputMessage extends AuthenticatedMessage {
+  type: WsMessageOutputTypes.PUBLIC_CHAT_OUTPUT;
+  content: {
+    timestamp: number;
+    roomId: number; //Room id could be useful for player facing message since user subscribed to room, not round
+    roundId: number;
+    userId: number;
+    text: string;
+  };
+}
 
 export type HeartbeatOutputMessage = HeartbeatInputMessage; //Backend + user both use the same heartbeat message
 
 export interface GMOutputMessage extends AuthenticatedMessage {
   type: WsMessageOutputTypes.GM_ACTION_OUTPUT;
   content: {
+    timestamp: number;
     roomId?: number;
     roundId?: number;
     content: {
@@ -126,8 +138,8 @@ export interface GMOutputMessage extends AuthenticatedMessage {
 
 export interface ParticipantsOutputMessage {
   type: WsMessageOutputTypes.PARTICIPANTS_OUTPUT;
-  timestamp: number;
   content: {
+    timestamp: number;
     roomId: number;
     count: number;
   };
@@ -135,8 +147,8 @@ export interface ParticipantsOutputMessage {
 
 export interface SystemNotificationOutputMessage {
   type: WsMessageOutputTypes.SYSTEM_NOTIFICATION_OUTPUT;
-  timestamp: number;
   content: {
+    timestamp: number;
     roomId?: number;
     roundId?: number;
     text: string;
@@ -168,7 +180,9 @@ export interface ObservationPriceData {
 export interface AgentMessageOutputMessage extends AuthenticatedMessage {
   type: WsMessageOutputTypes.AGENT_MESSAGE_OUTPUT;
   content: {
+    timestamp: number;
     messageId: number;
+    roomId: number; //Room id included here to provide agent w/ extended context + possible caching optimizations
     roundId: number;
     agentId: number;
     agentRoomAddress: string;
@@ -176,22 +190,14 @@ export interface AgentMessageOutputMessage extends AuthenticatedMessage {
   };
 }
 
-export interface ObservationOutputMessage {
-  type: WsMessageOutputTypes.OBSERVATION_OUTPUT;
-  timestamp: number;
-  content: {
-    observationType: ObservationType;
-    roomId: number;
-    roundId: number;
-    data: ObservationWalletBalanceData | ObservationPriceData;
-  };
-}
+export type ObservationOutputMessage = ObservationMessageInputMessage;
 
 // This message is sent to players in the room, it exposes the PvP actions that were taken on the message
-export interface AiChatAgentMessageOutputMessage{
+export interface AiChatAgentMessageOutputMessage {
   type: WsMessageOutputTypes.AI_CHAT_AGENT_MESSAGE_OUTPUT;
   content: {
-    roomId: number;
+    timestamp: number;
+    roomId: number; //Room id could be useful for player facing message since user subscribed to room, not round
     roundId: number;
     senderId: number;
     originalMessages: { agentId: number; message: any }[];
@@ -204,8 +210,9 @@ export interface AiChatAgentMessageOutputMessage{
 
 export interface AiChatPvpStatusAppliedOutputMessage {
   type: WsMessageOutputTypes.AI_CHAT_PVP_ACTION;
-  timestamp: number;
   content: {
+    timestamp: number;
+    roomId: number; //Room id could be useful for player facing message since user subscribed to room, not round
     roundId: number;
     agentId: number;
     instigator: string; // Address of the player who initiated the action
@@ -216,8 +223,9 @@ export interface AiChatPvpStatusAppliedOutputMessage {
 
 export interface AiChatPvpStatusRemovedOutputMessage {
   type: WsMessageOutputTypes.AI_CHAT_PVP_STATUS_REMOVED_OUTPUT;
-  timestamp: number;
   content: {
+    timestamp: number;
+    roomId: number; //Room id could be useful for player facing message since user subscribed to room, not round
     roundId: number;
     agentId: number;
     instigator: string; // Address of the player who initiated the action
