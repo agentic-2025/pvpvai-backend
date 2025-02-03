@@ -5,7 +5,7 @@ import {
   participantsInputMessageSchema,
   participantsOutputMessageSchema,
   publicChatMessageInputSchema,
-  systemNotificationOutputMessageSchema,
+  systemNotificationOutputSchema,
 } from '../rooms';
 import { Database } from '../types/database.types';
 import {
@@ -36,7 +36,7 @@ export class WSOperations {
     error: boolean = false,
     originalMessage?: any
   ) {
-    const message: z.infer<typeof systemNotificationOutputMessageSchema> = {
+    const message: z.infer<typeof systemNotificationOutputSchema> = {
       type: WsMessageOutputTypes.SYSTEM_NOTIFICATION_OUTPUT,
       content: {
         timestamp: Date.now(),
