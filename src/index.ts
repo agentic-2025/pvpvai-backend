@@ -52,7 +52,7 @@ server.get('/ping', async (request, reply) => {
 // WebSocket route
 server.register(async function (fastify) {
   fastify.get('/ws', { websocket: true }, (connection, req) => {
-    const client = connection.socket;
+    const client = connection;
 
     // Set up heartbeat check for this client
     const heartbeatInterval = wsOps.setupHeartbeat(client);
