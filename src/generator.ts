@@ -1,11 +1,9 @@
-import { faker } from '@faker-js/faker';
 import { createClient } from '@supabase/supabase-js';
 import WebSocket from 'ws';
 import { Database } from './types/database.types';
 import {
   AIChatContent,
   GMMessageContent,
-  PublicChatContent,
   PVPMessageContent,
   WSMessageInput,
   WSMessageOutput,
@@ -53,12 +51,23 @@ const samplePVPActions = [
   { type: 'Poison', message: 'Message altered' },
 ] as const;
 
+const sampleAIMessages = [
+  'Analyzing market conditions...',
+  'Detected unusual trading pattern',
+  'Recommending portfolio rebalancing',
+  'Market sentiment is positive',
+  'Risk level increasing',
+];
+
 const getRandomMessage = () => sampleMessages[Math.floor(Math.random() * sampleMessages.length)];
 
 const getRandomGMAction = () => sampleGMActions[Math.floor(Math.random() * sampleGMActions.length)];
 
 const getRandomPVPAction = () =>
   samplePVPActions[Math.floor(Math.random() * samplePVPActions.length)];
+
+const getRandomAIMessage = () =>
+  sampleAIMessages[Math.floor(Math.random() * sampleAIMessages.length)];
 
 async function getTestUsers() {
   const { data: users, error } = await supabase.from('users').select('id').limit(NUM_TEST_USERS);
@@ -103,17 +112,17 @@ async function getActiveRoomAndRound() {
   };
 }
 
-function generateBadMessage(): WSMessageInput {
+function generateBadMessage(): Partial<WSMessageInput> {
   const badMessages = [
-    { type: 'invalid_type' },
-    { type: 'public_chat', content: {} },
-    { type: 'public_chat', content: { roomId: 'not_a_number' } },
-    { type: 'subscribe_room' },
+    { type: 'invalid_type' as WsMessageType },
+    { type: 'public_chat' as WsMessageType, content: {} },
+    { type: 'public_chat' as WsMessageType, content: { roomId: 'not_a_number' } },
+    { type: 'subscribe_room' as WsMessageType },
     {},
     null,
     undefined,
   ];
-  return badMessages[Math.floor(Math.random() * badMessages.length)] as WSMessageInput;
+  return badMessages[Math.floor(Math.random() * badMessages.length)] as Partial<WSMessageInput>;
 }
 
 interface Connection {
@@ -260,63 +269,72 @@ async function generateMessages() {
           let message: WSMessageInput;
 
           if (rand < BAD_MESSAGE_PROBABILITY) {
-            message = generateBadMessage();
-          } else if (rand < 0.1) {
+            message = generateBadMessage() as WSMessageInput;
+          } else if (rand < 0.15) {
+            // GM Action
             message = {
               type: WsMessageType.GM_ACTION,
               author: activeConnection.userId,
               timestamp: Date.now(),
               content: {
-                messageId: rand * 100,
-                gmId: 1,
                 roomId: roomAndRound.roomId,
                 roundId: roomAndRound.roundId,
+                gm_id: activeConnection.userId.toString(),
                 content: {
                   text: getRandomGMAction(),
                 },
+                targets: [],
                 timestamp: Date.now(),
-              } as GMMessageContent,
+              } satisfies GMMessageContent,
             };
-          } else if (rand < 0.2) {
+          } else if (rand < 0.3) {
+            // PVP Action
             const action = getRandomPVPAction();
             message = {
               type: WsMessageType.PVP_ACTION,
               author: activeConnection.userId,
               timestamp: Date.now(),
               content: {
-                messageId: rand * 100,
-                txHash: '0x123',
                 roomId: roomAndRound.roomId,
                 roundId: roomAndRound.roundId,
-                instigator: faker.finance.ethereumAddress(),
+                txHash: `0x${Math.random().toString(16).slice(2)}`,
+                instigator: activeConnection.userId.toString(),
+                actionType: action.type,
                 targets: [],
                 additionalData: {},
-                actionType: action.type,
-              } as PVPMessageContent,
+              } satisfies PVPMessageContent,
             };
           } else if (rand < 0.4) {
-            //TODO put random ai
+            // AI Chat
             message = {
               type: WsMessageType.AI_CHAT,
               author: activeConnection.userId,
               timestamp: Date.now(),
               content: {
-                messageId: rand * 100,
                 roomId: roomAndRound.roomId,
                 roundId: roomAndRound.roundId,
-                actor: faker.finance.ethereumAddress(),
+                message_id: Date.now(),
+                actor: `0x${Math.random().toString(16).slice(2)}`,
                 sent: Date.now(),
-                originalContent: {
-                  text: getRandomMessage(),
-                },
                 content: {
-                  text: getRandomMessage(),
+                  text: getRandomAIMessage(),
                 },
                 timestamp: Date.now(),
-                altered: rand / 100 % 2 === 0,
-              } as AIChatContent,
+                altered: false,
+              } satisfies AIChatContent,
+            };
+          } else if (rand < 0.5) {
+            // Participants request
+            message = {
+              type: WsMessageType.PARTICIPANTS,
+              author: activeConnection.userId,
+              timestamp: Date.now(),
+              content: {
+                roomId: roomAndRound.roomId,
+              },
             };
           } else {
+            // Public Chat (default)
             message = {
               type: WsMessageType.PUBLIC_CHAT,
               author: activeConnection.userId,
@@ -325,9 +343,10 @@ async function generateMessages() {
                 roomId: roomAndRound.roomId,
                 roundId: roomAndRound.roundId,
                 text: getRandomMessage(),
-              } as PublicChatContent,
+              },
             };
           }
+
           activeConnection.ws.send(JSON.stringify(message));
           console.log(`User ${activeConnection.userId} sent message:`, message);
         }

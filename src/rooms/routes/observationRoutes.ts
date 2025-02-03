@@ -2,8 +2,10 @@ import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { supabase, wsOps } from '../../config';
 import { signedRequestHeaderSchema } from '../../middleware/signatureVerification';
-import { WsMessageType } from '../../types/ws';
 import { roundController } from '../controllers/roundController';
+import { ObservationOutputMessage, WsMessageOutputTypes } from '../../types/ws';
+import { ErrorFragment } from 'ethers';
+import { roundPreflight } from '../utils/messageHandler';
 
 export enum ObservationType {
   WALLET_BALANCES = 'wallet-balances',
@@ -13,9 +15,13 @@ export enum ObservationType {
 
 export const observationBodySchema = z.object({
   timestamp: z.number(),
-  account: z.string(),
-  observationType: z.nativeEnum(ObservationType),
-  content: z.any(),
+  sender: z.string(),
+  content: z.object({
+    roomId: z.number(),
+    roundId: z.number(),
+    observationType: z.nativeEnum(ObservationType),
+    data: z.any(),
+  }),
 });
 
 interface AgentDeliveryStatus {
@@ -30,7 +36,7 @@ export async function observationRoutes(server: FastifyInstance) {
     Headers: z.infer<typeof signedRequestHeaderSchema>;
     Body: z.infer<typeof observationBodySchema>;
   }>(
-    '/observations',
+    '/observations', //TODO move this to /rooms/:roomId/rounds/:roundId/observations
     {
       schema: {
         headers: signedRequestHeaderSchema,
@@ -40,14 +46,26 @@ export async function observationRoutes(server: FastifyInstance) {
     async (request, reply) => {
       try {
         const observation = request.body;
-
+        const { roomId, roundId } = observation.content;
+        const {round, roundAgents, agents, valid: roundValid, reason: roundReason} = await roundPreflight(roundId)
+        if(!roundValid) {
+          return reply.status(400).send({
+            error: `Round not valid: ${roundReason}`,
+          });
+        }
+        if(!agents) {
+          return reply.status(400).send({
+            error: 'No agents found for round, nothing to post',
+          });
+        }
+        
         // Insert into round_observations table
         const { data, error } = await supabase
           .from('round_observations')
           .insert({
             round_id: observation.content.roundId,
-            observation_type: observation.observationType,
-            creator: observation.account,
+            observation_type: observation.content.observationType,
+            creator: observation.sender,
             content: observation.content,
             created_at: new Date(observation.timestamp).toISOString(),
           })
@@ -59,87 +77,49 @@ export async function observationRoutes(server: FastifyInstance) {
             error: 'Failed to store observation',
             details: error.message,
           });
-        }
 
+
+        }
+        
         console.log('Stored observation in database:', data);
 
         // Check if this is round-specific data that needs to be broadcast
         if (
-          observation.observationType === ObservationType.PRICE_DATA ||
-          observation.observationType === ObservationType.WALLET_BALANCES
+          observation.content.observationType === ObservationType.PRICE_DATA ||
+          observation.content.observationType === ObservationType.WALLET_BALANCES
         ) {
-          const { roomId, roundId } = observation.content;
 
-          // Get all not kicked agents with their details
-          const { data: roundAgents, error: agentsError } = await supabase
-            .from('round_agents')
-            .select(
-              `
-              agent_id,
-              agents (
-                id,
-                endpoint
-              )
-            `
-            )
-            .eq('round_id', roundId)
-            .eq('kicked', false);
 
           const deliveryStatus: AgentDeliveryStatus[] = [];
+          for(const agent of agents) {
+            //TODO Send message to agent here
+          }
+     
 
-          if (agentsError) {
-            console.error('Error fetching round agents:', agentsError);
-          } else {
-            // Process message for each agent and track status
-            const processPromises = roundAgents?.map(async (roundAgent) => {
-              const status: AgentDeliveryStatus = {
-                agent_id: roundAgent.agent_id,
-                success: false,
-              };
-
-              if (!roundAgent.agents) {
-                status.error = 'No agent data found';
-                deliveryStatus.push(status);
-                return;
-              }
-
-              try {
-                await roundController.processAgentMessage(
-                  roomId,
-                  roundId,
-                  roundAgent.agent_id,
-                  observation.content,
-                  observation.timestamp,
-                  request.headers['x-authorization-signature']
-                );
-                status.success = true;
-              } catch (error) {
-                status.error = error instanceof Error ? error.message : 'Unknown error';
-                console.error(
-                  `Error processing observation for agent ${roundAgent.agent_id}:`,
-                  error
-                );
-              }
-              deliveryStatus.push(status);
-            });
-
-            if (processPromises) {
-              await Promise.all(processPromises);
+          const wsMessage: ObservationOutputMessage = {
+            type: WsMessageOutputTypes.OBSERVATION_OUTPUT,
+            timestamp: observation.timestamp,
+            content:{
+              observationType: observation.content.observationType,
+              roomId: roomId,
+              roundId: roundId,
+              data: observation.content.data,
             }
           }
-
-          // Broadcast to all connected websocket clients in the room
-          const enrichedContent = {
-            ...observation.content,
-            agent_delivery_status: deliveryStatus,
-          };
-
-          await wsOps.broadcastToRoom(roomId, {
-            type: WsMessageType.OBSERVATION,
-            timestamp: observation.timestamp,
-            signature: request.headers['x-authorization-signature'],
-            content: enrichedContent,
-          });
+          const { data: recprdObservervationMessage, error: recprdObservervationError } =
+            await supabase.from('round_agent_messages').insert({
+              round_id: roundId,
+              agent_id: 1, //TODO should be id of the oracle-agent
+              original_author: 1, //TODO should be id of the oracle-agent
+              message_type: WsMessageOutputTypes.OBSERVATION_OUTPUT,
+              pvp_status_effects: {},
+              message: JSON.stringify(wsMessage)
+            });
+          if(recprdObservervationError) {
+            console.error('Error recording observation message:', recprdObservervationError);
+            //Oh well, we tried
+          }
+          await wsOps.broadcastToRoom(roomId, wsMessage);
         }
 
         return reply.send({

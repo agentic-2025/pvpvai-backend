@@ -73,6 +73,7 @@ export type Database = {
       }
       game_masters: {
         Row: {
+          agent_role: string | null
           character_card: string | null
           color: string | null
           created_on: string
@@ -87,6 +88,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          agent_role?: string | null
           character_card?: string | null
           color?: string | null
           created_on?: string
@@ -101,6 +103,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          agent_role?: string | null
           character_card?: string | null
           color?: string | null
           created_on?: string
@@ -202,6 +205,7 @@ export type Database = {
           id: number
           image_url: string | null
           name: string
+          participants: number
           pvp_action_log: Json | null
           room_config: Json | null
           round_ends_on: string | null
@@ -222,6 +226,7 @@ export type Database = {
           id?: number
           image_url?: string | null
           name: string
+          participants?: number
           pvp_action_log?: Json | null
           room_config?: Json | null
           round_ends_on?: string | null
@@ -242,6 +247,7 @@ export type Database = {
           id?: number
           image_url?: string | null
           name?: string
+          participants?: number
           pvp_action_log?: Json | null
           room_config?: Json | null
           round_ends_on?: string | null
@@ -279,6 +285,9 @@ export type Database = {
           created_at: string
           id: number
           message: Json
+          message_type: string | null
+          post_pvp_message: string | null
+          pvp_status_effects: Json | null
           round_id: number
           updated_at: string
         }
@@ -287,6 +296,9 @@ export type Database = {
           created_at?: string
           id?: number
           message: Json
+          message_type?: string | null
+          post_pvp_message?: string | null
+          pvp_status_effects?: Json | null
           round_id: number
           updated_at?: string
         }
@@ -295,6 +307,9 @@ export type Database = {
           created_at?: string
           id?: number
           message?: Json
+          message_type?: string | null
+          post_pvp_message?: string | null
+          pvp_status_effects?: Json | null
           round_id?: number
           updated_at?: string
         }
@@ -366,48 +381,6 @@ export type Database = {
           },
         ]
       }
-      round_gm_messages: {
-        Row: {
-          created_at: string
-          gm_id: number
-          id: number
-          message: Json | null
-          round_id: number
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          gm_id: number
-          id?: number
-          message?: Json | null
-          round_id: number
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          gm_id?: number
-          id?: number
-          message?: Json | null
-          round_id?: number
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "round_gm_messages_gm_id_fkey"
-            columns: ["gm_id"]
-            isOneToOne: false
-            referencedRelation: "game_masters"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "round_gm_messages_round_id_fkey"
-            columns: ["round_id"]
-            isOneToOne: false
-            referencedRelation: "rounds"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       round_observations: {
         Row: {
           content: Json
@@ -445,6 +418,7 @@ export type Database = {
       }
       round_user_messages: {
         Row: {
+          connection_id: string | null
           created_at: string
           id: number
           message: Json | null
@@ -453,6 +427,7 @@ export type Database = {
           user_id: number
         }
         Insert: {
+          connection_id?: string | null
           created_at?: string
           id?: number
           message?: Json | null
@@ -461,6 +436,7 @@ export type Database = {
           user_id: number
         }
         Update: {
+          connection_id?: string | null
           created_at?: string
           id?: number
           message?: Json | null
@@ -494,6 +470,7 @@ export type Database = {
           id: number
           outcome: Json | null
           pvp_action_log: Json | null
+          pvp_status_effects: Json | null
           room_id: number
           round_config: Json | null
           updated_at: string
@@ -506,6 +483,7 @@ export type Database = {
           id?: number
           outcome?: Json | null
           pvp_action_log?: Json | null
+          pvp_status_effects?: Json | null
           room_id: number
           round_config?: Json | null
           updated_at?: string
@@ -518,6 +496,7 @@ export type Database = {
           id?: number
           outcome?: Json | null
           pvp_action_log?: Json | null
+          pvp_status_effects?: Json | null
           room_id?: number
           round_config?: Json | null
           updated_at?: string
@@ -545,21 +524,21 @@ export type Database = {
           id: number
           room_id: number
           updated_at: string
-          user_id: number
+          user_id: number | null
         }
         Insert: {
           created_at?: string
           id?: number
           room_id: number
           updated_at?: string
-          user_id: number
+          user_id?: number | null
         }
         Update: {
           created_at?: string
           id?: number
           room_id?: number
           updated_at?: string
-          user_id?: number
+          user_id?: number | null
         }
         Relationships: [
           {

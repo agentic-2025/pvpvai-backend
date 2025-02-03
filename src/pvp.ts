@@ -10,12 +10,14 @@
 // 3. Return the altered AI Chat message and a boolean indicating if the content was altered (altered = true if any PvP modifiers modified the message, the only condition that does this for now is Poison)
 // }
 // The other two types of PvP actions are Amnesia and Direct Attack. These actions are taken against a single agent and do not modify the message or target, so they are 
+import { RoundMessage } from './rooms';
 import { PvPResult } from './rooms/utils/pvpHandler';
 
 export async function applyPvp(
-  message: any,
+  message: RoundMessage,
   senderAgentId: number,
   targetAgentIds: number[]
+
 ): Promise<PvPResult> {
   // Example only; replace with actual logic and DB lookups
   let modifiedMessage = message;

@@ -1,6 +1,5 @@
 import { wsOps } from '../../config';
 import { applyPvp } from '../../pvp';
-import { AIChatContent, WSMessageOutput, WsMessageType } from '../../types/ws';
 import { roundService } from '../services/roundService';
 import { RoomOperationResult } from '../types/roomTypes';
 import { RoundDataDB } from '../types/roundTypes';
@@ -10,6 +9,7 @@ export class RoundController {
     return await roundService.getOrCreateActiveRound(roomId);
   }
 
+  
   async processAgentMessage(
     roomId: number,
     roundId: number,
@@ -26,8 +26,7 @@ export class RoundController {
       }
 
       // Apply PvP rules
-      const { message: modifiedMessage, targets } = await applyPvp(
-        message,
+      const { message: modifiedMessage, targets } = await applyPvp(message,
         agentId,
         [] // Target agents will be determined by PvP rules
       );
@@ -42,9 +41,9 @@ export class RoundController {
         timestamp,
         signature,
         content: {
-          messageId: messageResult.data.id,
           roomId,
           roundId,
+          messageId: messageResult.data.id,
           actor: agentId.toString(),
           sent: timestamp,
           content: modifiedMessage,

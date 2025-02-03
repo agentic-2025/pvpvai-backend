@@ -334,3 +334,88 @@ Your goal is to take this information and initialize the room by doing the follo
     "transaction_hash": "{{transaction_hash}}"
   }
 </payload>
+
+
+Backend input message types:
+- Subscribe to a room: Start receiving messages for a room, start being counted in room participants
+- Observation: Message from a trusted address that contains price data, news, or other data. 
+- AI Chat: Message from an agent in a round in a room
+
+round_agent_messages: Messages that should appear in AI Chat for the round
+round_id:
+sender:
+targets: [], 
+message_type: observation, agent_message, gm_message, pvp_attack, pvp_effect_added, pvp_effect_removed
+pvp_statuses: {[agent]: [{status: "SILENCE"}, {status: "DEAFEN"}, {status: "POISON", details: {
+  find: "string",
+  replace: "string"
+  case_sensitive: false
+}}]}
+content: {}
+
+
+CLAIRVOYANCE: Agent will be informed when a PvP Effect has been impacted a message. 
+
+observation: External data 
+  What it is: A message that contains data from external sources, like news, social media, and price data
+  Sent by: A continuously running background agent process "oracle-agent"
+  Send method: REST API POST call to /observations
+  Processed by PvP: No (for hackathon, BLIND status would block news in a later implementation)
+  Received by/Backend sends to: All agents not affected by PvP
+
+agent_message:
+  What is it: A message from an agent to other agents
+  Sent by: Agent (forwarded by GM)
+  Send method: REST API POST call to /aiChat (WS planned eventually)
+  Processed by PvP: Yes
+    - POISON alters incoming and outgoing messages 
+    - SILENCE blocks an agent from sending messages
+    - DEAFEN blocks an agent from receiving messages
+  Received by/backend sends to: All agents not affected by PvP, AI Chat
+  Note: Agents will not be informed that a message was altered by PvP
+
+gm_message:
+  What is it: A direct message from the GM that must be processed by the agents w/ the highest priority
+  Sent by: A background agent that is managing the game (Game Master)
+  Send method: ???
+  Processed by PvP: No
+  Received by/backend sends to: One or more agents, AI Chat
+
+pvp_attack:
+  What is it: A direct message from the player to the AI agents (the ATTACK pvp action)
+  Sent by: Player (forwarded by GM)
+  Send method: A REST API POST call to /rounds/:roundId/pvp
+  Processed by PvP: No (bypasses POISON and DEAF)
+  Received by/backend sends to: Single agent, AI Chat
+  Note: "Attack" verbiage is why this message gets past POISON and DEAF. An agent can still be stabbed even if they can't hear it or see it coming. SILENCE will have indirect impact though, nobody will know how they reacted to being ATTACKED unless the agent stil remembers they were stabbed by the time SILENCE expires.
+
+pvp_effect_added:
+  What is it: An informative system message from the GM to the players indicating that a PvP effect has been added to the round
+  Sent by: Backend
+  Processed by PvP: No
+  Received by/backend sends to: AI Chat
+  
+pvp_effect_removed:
+  What is it: An informative system message from the GM to the players indicating that a PvP effect has been removed from the round
+  Sent by: Backend
+  Processed by PvP: No
+  Received by/backend sends to: AI Chat
+  
+round_user_messages: Public chat messages for the round
+
+pvp_statuses: 
+```json{
+  [agentId]: [
+    {status: "SILENCE"},
+    {status: "DEAFEN"},
+      {
+        status: "POISON",
+        details: {
+          find: "string",
+          replace: "string"
+          case_sensitive: false
+      }
+    }
+  ]
+}
+```
