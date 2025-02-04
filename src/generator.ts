@@ -313,7 +313,7 @@ async function generateMessages() {
 
           if (rand < BAD_MESSAGE_PROBABILITY) {
             message = generateBadMessage();
-          } else if (rand < 0.25) {
+          } else if (rand < 0.35) {  // 35% for public chat
             // Public chat message
             const content = {
               roomId: roomAndRound.roomId,
@@ -330,7 +330,7 @@ async function generateMessages() {
               signature,
               content,
             } satisfies z.infer<typeof publicChatMessageInputSchema>;
-          } else if (rand < 0.35) {
+          } else if (rand < 0.55) {  // 20% for participants
             // Participants request
             const content = {
               roomId: roomAndRound.roomId,
@@ -341,7 +341,7 @@ async function generateMessages() {
               messageType: WsMessageTypes.PARTICIPANTS,
               content,
             } satisfies z.infer<typeof participantsInputMessageSchema>;
-          } else if (rand < 0.45) {
+          } else if (rand < 0.775) {  // 22.5% for GM messages
             // GM message
             const content = {
               roomId: roomAndRound.roomId,
@@ -362,7 +362,7 @@ async function generateMessages() {
               signature,
               content,
             } satisfies z.infer<typeof gmMessageInputSchema>;
-          } else if (rand < 0.7) {
+          } else {  // 22.5% for agent messages
             // Agent message via POST
             try {
               const content = {

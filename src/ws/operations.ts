@@ -3,16 +3,16 @@ import { z } from 'zod';
 import { SIGNATURE_WINDOW_MS, supabase } from '../config';
 import { Database } from '../types/database.types';
 import { HeartbeatOutputMessage, SubscribeRoomInputMessage, WsMessageTypes } from '../types/ws';
+import { verifySignedMessage } from '../utils/auth';
 import { processGmMessage } from '../utils/messageHandler';
 import {
+  gmMessageInputSchema,
   participantsInputMessageSchema,
   participantsOutputMessageSchema,
   publicChatMessageInputSchema,
   systemNotificationOutputSchema,
-  gmMessageInputSchema,
 } from '../utils/schemas';
 import { roundPreflight } from '../utils/validation';
-import { verifySignedMessage } from '../utils/auth';
 
 export type RoomMap = Map<number, Set<WebSocket>>;
 export type ClientInfo = Map<WebSocket, { roomId: number }>;
@@ -156,7 +156,7 @@ export class WSOperations {
     //TODO implement signature auth here, sending a message requires the user to be logged in.
 
     try {
-      const {signature, sender, content} = message;
+      const { signature, sender, content } = message;
       const { roundId, timestamp } = message.content;
       const { error: signatureError } = verifySignedMessage(
         content,
@@ -221,7 +221,6 @@ export class WSOperations {
       await this.sendSystemMessage(client, 'Failed to handle participants message', true, message);
     }
   }
-
 
   // Update subscribe room handler
   async handleSubscribeRoom(client: WebSocket, message: SubscribeRoomInputMessage): Promise<void> {
@@ -336,15 +335,18 @@ export class WSOperations {
 
   // TODO This is a debug route, remove before prod
   // Create a new GM message
-  async handleGmMessage(client: WebSocket, message: z.infer<typeof gmMessageInputSchema>): Promise<void> {
+  async handleGmMessage(
+    client: WebSocket,
+    message: z.infer<typeof gmMessageInputSchema>
+  ): Promise<void> {
     //Process GM message takes care of validation + broadcast including a variant of signature verification
-    const {error} = await processGmMessage(message);
+    const { error } = await processGmMessage(message);
     if (error) {
       await this.sendSystemMessage(client, error, true, message);
     }
     await this.sendSystemMessage(client, 'GM Message processed and stored', false, message);
   }
-  
+
   setupHeartbeat(client: WebSocket): NodeJS.Timeout {
     return setInterval(() => {
       if (this.clientHeartbeats.has(client)) {
