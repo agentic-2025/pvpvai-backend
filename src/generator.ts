@@ -19,8 +19,8 @@ const supabase = createClient<Database>(
 );
 
 const WEBSOCKET_URL = process.env.WEBSOCKET_URL || 'ws://localhost:3000/ws';
-const MIN_DELAY = 1000;
-const MAX_DELAY = 5000;
+const MIN_DELAY = 500;
+const MAX_DELAY = 2000;
 const NUM_TEST_USERS = 3;
 const CONNECTIONS_PER_USER = 5;
 const RECONNECT_INTERVAL = 10000;
@@ -38,14 +38,6 @@ const sampleMessages = [
   'Nice move!',
   'Interesting strategy...',
   'Well played!',
-];
-
-const sampleGMActions = [
-  'Kicked player for inactivity',
-  'Started new round',
-  'Paused game',
-  'Resumed game',
-  'Changed game settings',
 ];
 
 const samplePVPActions = [
@@ -313,7 +305,8 @@ async function generateMessages() {
 
           if (rand < BAD_MESSAGE_PROBABILITY) {
             message = generateBadMessage();
-          } else if (rand < 0.35) {  // 35% for public chat
+          } else if (rand < 0.35) {
+            // 35% for public chat
             // Public chat message
             const content = {
               roomId: roomAndRound.roomId,
@@ -330,7 +323,8 @@ async function generateMessages() {
               signature,
               content,
             } satisfies z.infer<typeof publicChatMessageInputSchema>;
-          } else if (rand < 0.55) {  // 20% for participants
+          } else if (rand < 0.55) {
+            // 20% for participants
             // Participants request
             const content = {
               roomId: roomAndRound.roomId,
@@ -341,7 +335,8 @@ async function generateMessages() {
               messageType: WsMessageTypes.PARTICIPANTS,
               content,
             } satisfies z.infer<typeof participantsInputMessageSchema>;
-          } else if (rand < 0.775) {  // 22.5% for GM messages
+          } else if (rand < 0.775) {
+            // 22.5% for GM messages
             // GM message
             const content = {
               roomId: roomAndRound.roomId,
@@ -362,7 +357,8 @@ async function generateMessages() {
               signature,
               content,
             } satisfies z.infer<typeof gmMessageInputSchema>;
-          } else {  // 22.5% for agent messages
+          } else {
+            // 22.5% for agent messages
             // Agent message via POST
             try {
               const content = {
