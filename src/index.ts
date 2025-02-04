@@ -7,6 +7,7 @@ import zodSchemaPlugin from './plugins/zodSchema';
 import roomsRoutes from './rooms';
 import { agentRoutes } from './routes/agentRoutes';
 import { messagesRoutes } from './routes/messageRoutes';
+import { roundRoutes } from './routes/roundRoutes';
 import { WsMessageTypes } from './types/ws';
 
 const server = fastify({
@@ -26,6 +27,7 @@ server.register(websocket);
 server.register(agentRoutes, { prefix: '/agents' });
 server.register(roomsRoutes, { prefix: '/rooms' });
 server.register(messagesRoutes, { prefix: '/messages' });
+server.register(roundRoutes, { prefix: '/rounds' });
 
 // Register routes
 
@@ -127,3 +129,5 @@ const start = async () => {
 };
 
 start();
+
+

@@ -16,6 +16,7 @@ export type Database = {
           created_at: string
           creator_id: number
           display_name: string
+          earnings: number | null
           endpoint: string
           eth_wallet_address: string | null
           id: number
@@ -25,6 +26,7 @@ export type Database = {
           single_sentence_summary: string | null
           sol_wallet_address: string | null
           status: string | null
+          type: string
           updated_at: string
         }
         Insert: {
@@ -33,6 +35,7 @@ export type Database = {
           created_at?: string
           creator_id: number
           display_name: string
+          earnings?: number | null
           endpoint: string
           eth_wallet_address?: string | null
           id?: number
@@ -42,6 +45,7 @@ export type Database = {
           single_sentence_summary?: string | null
           sol_wallet_address?: string | null
           status?: string | null
+          type?: string
           updated_at?: string
         }
         Update: {
@@ -50,6 +54,7 @@ export type Database = {
           created_at?: string
           creator_id?: number
           display_name?: string
+          earnings?: number | null
           endpoint?: string
           eth_wallet_address?: string | null
           id?: number
@@ -59,6 +64,7 @@ export type Database = {
           single_sentence_summary?: string | null
           sol_wallet_address?: string | null
           status?: string | null
+          type?: string
           updated_at?: string
         }
         Relationships: [
@@ -71,58 +77,9 @@ export type Database = {
           },
         ]
       }
-      game_masters: {
-        Row: {
-          agent_role: string | null
-          character_card: string | null
-          color: string | null
-          created_on: string
-          display_name: string | null
-          eth_wallet_address: string
-          id: number
-          image_url: string | null
-          last_health_check: string | null
-          plugins: Json | null
-          sol_wallet_address: string
-          status: string | null
-          updated_at: string
-        }
-        Insert: {
-          agent_role?: string | null
-          character_card?: string | null
-          color?: string | null
-          created_on?: string
-          display_name?: string | null
-          eth_wallet_address: string
-          id?: number
-          image_url?: string | null
-          last_health_check?: string | null
-          plugins?: Json | null
-          sol_wallet_address: string
-          status?: string | null
-          updated_at?: string
-        }
-        Update: {
-          agent_role?: string | null
-          character_card?: string | null
-          color?: string | null
-          created_on?: string
-          display_name?: string | null
-          eth_wallet_address?: string
-          id?: number
-          image_url?: string | null
-          last_health_check?: string | null
-          plugins?: Json | null
-          sol_wallet_address?: string
-          status?: string | null
-          updated_at?: string
-        }
-        Relationships: []
-      }
       room_agents: {
         Row: {
           agent_id: number
-          agent_type: string | null
           created_at: string
           id: number
           room_id: number
@@ -132,7 +89,6 @@ export type Database = {
         }
         Insert: {
           agent_id: number
-          agent_type?: string | null
           created_at?: string
           id?: number
           room_id: number
@@ -142,7 +98,6 @@ export type Database = {
         }
         Update: {
           agent_id?: number
-          agent_type?: string | null
           created_at?: string
           id?: number
           room_id?: number
@@ -211,8 +166,7 @@ export type Database = {
           participants: number
           pvp_action_log: Json | null
           room_config: Json | null
-          round_ends_on: string | null
-          round_time: number | null
+          round_time: number
           type_id: number
           updated_at: string
         }
@@ -232,8 +186,7 @@ export type Database = {
           participants?: number
           pvp_action_log?: Json | null
           room_config?: Json | null
-          round_ends_on?: string | null
-          round_time?: number | null
+          round_time?: number
           type_id: number
           updated_at?: string
         }
@@ -253,8 +206,7 @@ export type Database = {
           participants?: number
           pvp_action_log?: Json | null
           room_config?: Json | null
-          round_ends_on?: string | null
-          round_time?: number | null
+          round_time?: number
           type_id?: number
           updated_at?: string
         }
@@ -270,7 +222,7 @@ export type Database = {
             foreignKeyName: "rooms_game_master_id_fkey"
             columns: ["game_master_id"]
             isOneToOne: false
-            referencedRelation: "game_masters"
+            referencedRelation: "agents"
             referencedColumns: ["id"]
           },
           {
@@ -486,7 +438,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
-          active?: boolean
+          active: boolean
           created_at?: string
           game_master_action_log?: Json | null
           game_master_id?: number | null
@@ -512,57 +464,11 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
-          {
-            foreignKeyName: "rounds_game_master_id_fkey"
-            columns: ["game_master_id"]
-            isOneToOne: false
-            referencedRelation: "game_masters"
-            referencedColumns: ["id"]
-          },
           {
             foreignKeyName: "rounds_room_id_fkey"
             columns: ["room_id"]
             isOneToOne: false
             referencedRelation: "rooms"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      user_rooms: {
-        Row: {
-          created_at: string
-          id: number
-          room_id: number
-          updated_at: string
-          user_id: number | null
-        }
-        Insert: {
-          created_at?: string
-          id?: number
-          room_id: number
-          updated_at?: string
-          user_id?: number | null
-        }
-        Update: {
-          created_at?: string
-          id?: number
-          room_id?: number
-          updated_at?: string
-          user_id?: number | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "user_rooms_room_id_fkey"
-            columns: ["room_id"]
-            isOneToOne: false
-            referencedRelation: "rooms"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "user_rooms_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "users"
             referencedColumns: ["id"]
           },
         ]

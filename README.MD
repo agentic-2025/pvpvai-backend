@@ -20,7 +20,7 @@ Guide is here, TL;DR below: <https://supabase.com/docs/guides/database/typescrip
 
 ```bash
 npm i -g supabase
-supabase gen types typescript --project-id "fxewzungnacaxpsnowcu" --schema public > ./src/database.types.ts
+supabase gen types typescript --project-id "fxewzungnacaxpsnowcu" --schema public > ./src/types/database.types.ts
 ```
 
 Run this whenever you update tables for any reason. See [the docs for details on how to consume](https://supabase.com/docs/guides/api/rest/generating-types#using-typescript-type-definitions).
