@@ -59,7 +59,7 @@ runtime = {
 
 ```typescript
 class GameMasterClient {
-  private readonly gmId: string;         // Wallet address for auth
+  private readonly gmId: string;         // Wallet address for auth in eliza-starter, but here it is gmNumericId
   private readonly gmNumericId: number;  // Database ID (51 is a gamemaster)
   private roomId: number;                // Database ID
   private roundId: number;               // Database ID
