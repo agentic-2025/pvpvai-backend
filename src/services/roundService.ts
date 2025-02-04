@@ -192,6 +192,11 @@ export class RoundService {
     const { data, error } = await supabase.from('rounds').select('*').eq('id', roundId).single();
     return { data, error };
   }
+
+  async getRoundAgents(roundId: number): Promise<{ data: Tables<'round_agents'>[] | null; error: PostgrestError | null }> {
+    const { data, error } = await supabase.from('round_agents').select('*').eq('round_id', roundId);
+    return { data, error };
+  }
 }
 
 export const roundService = new RoundService();

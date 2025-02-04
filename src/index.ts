@@ -1,12 +1,13 @@
 import cors from '@fastify/cors';
 import websocket from '@fastify/websocket';
 import fastify from 'fastify';
-import agentsRoutes from './agents';
 import { wsOps } from './config';
 import { signatureVerificationPlugin } from './middleware/signatureVerification';
 import zodSchemaPlugin from './plugins/zodSchema';
 import roomsRoutes from './rooms';
-import { WsMessageInputTypes } from './types/ws';
+import { agentRoutes } from './routes/agentRoutes';
+import { messagesRoutes } from './routes/messageRoutes';
+import { WsMessageTypes } from './types/ws';
 
 const server = fastify({
   logger: true,
@@ -22,8 +23,11 @@ server.register(zodSchemaPlugin);
 // Register WebSocket support
 server.register(websocket);
 
-server.register(agentsRoutes, { prefix: '/agents' });
+server.register(agentRoutes, { prefix: '/agents' });
 server.register(roomsRoutes, { prefix: '/rooms' });
+server.register(messagesRoutes, { prefix: '/messages' });
+
+// Register routes
 
 // Instead of registering the middleware globally, apply it directly to the protected route
 server.post(
@@ -63,35 +67,27 @@ server.register(async function (fastify) {
         const data = JSON.parse(message.toString());
 
         switch (data.type) {
-          case WsMessageInputTypes.SUBSCRIBE_ROOM_INPUT:
+          case WsMessageTypes.SUBSCRIBE_ROOM:
             wsOps.handleSubscribeRoom(client, data);
             break;
 
-          case WsMessageInputTypes.PARTICIPANTS_INPUT:
+          case WsMessageTypes.PARTICIPANTS:
             wsOps.handleParticipants(client, data);
             break;
 
-          case WsMessageInputTypes.PUBLIC_CHAT_INPUT:
+          case WsMessageTypes.PUBLIC_CHAT:
             await wsOps.handlePublicChat(client, data);
             break;
 
-          case WsMessageInputTypes.HEARTBEAT_INPUT:
+          case WsMessageTypes.HEARTBEAT:
             wsOps.handleHeartbeat(client);
             break;
 
-          case WsMessageInputTypes.GM_MESSAGE_INPUT:
-            await wsOps.handleGMChat(client, data);
+          case WsMessageTypes.GM_MESSAGE:
+            await wsOps.handleGmMessage(client, data);
             break;
 
 
-          default:
-            wsOps.sendSystemMessage(
-              client,
-              'Invalid message type, please pass a supported message type:' +
-                Object.values(WsMessageInputTypes).join(', '),
-              true,
-              data
-            );
         }
       } catch (err) {
         client.send(

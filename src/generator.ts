@@ -1,10 +1,17 @@
 import { createClient } from '@supabase/supabase-js';
+import axios from 'axios';
 import { Wallet } from 'ethers';
 import { WebSocket } from 'ws';
 import { z } from 'zod';
+import { backendEthersSigningWallet } from './config';
 import { Database } from './types/database.types';
-import { WsMessageInputTypes } from './types/ws';
-import { participantsInputMessageSchema, publicChatMessageInputSchema } from './utils/schemas';
+import { WsMessageTypes } from './types/ws';
+import {
+  agentMessageInputSchema,
+  gmMessageInputSchema,
+  participantsInputMessageSchema,
+  publicChatMessageInputSchema,
+} from './utils/schemas';
 
 const supabase = createClient<Database>(
   process.env.SUPABASE_URL || '',
@@ -18,6 +25,7 @@ const NUM_TEST_USERS = 3;
 const CONNECTIONS_PER_USER = 5;
 const RECONNECT_INTERVAL = 10000;
 const BAD_MESSAGE_PROBABILITY = 0.005;
+const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3000';
 
 const randomDelay = () => Math.floor(Math.random() * (MAX_DELAY - MIN_DELAY + 1)) + MIN_DELAY;
 
@@ -55,12 +63,34 @@ const sampleAIMessages = [
   'Risk level increasing',
 ];
 
+const sampleGMMessages = [
+  'Starting new round...',
+  'Round ended',
+  'Game paused for maintenance',
+  'Increasing difficulty',
+  'Special event starting soon',
+  'Bonus rewards activated',
+  'Tournament phase beginning',
+  'Final countdown initiated',
+];
+
+const sampleAgentMessages = [
+  'Analyzing market trends...',
+  'Executing trading strategy',
+  'Monitoring price movements',
+  'Adjusting position sizes',
+  'Evaluating risk parameters',
+];
+
 const getRandomMessage = () => sampleMessages[Math.floor(Math.random() * sampleMessages.length)];
-const getRandomGMAction = () => sampleGMActions[Math.floor(Math.random() * sampleGMActions.length)];
 const getRandomPVPAction = () =>
   samplePVPActions[Math.floor(Math.random() * samplePVPActions.length)];
 const getRandomAIMessage = () =>
   sampleAIMessages[Math.floor(Math.random() * sampleAIMessages.length)];
+const getRandomGMMessage = () =>
+  sampleGMMessages[Math.floor(Math.random() * sampleGMMessages.length)];
+const getRandomAgentMessage = () =>
+  sampleAgentMessages[Math.floor(Math.random() * sampleAgentMessages.length)];
 
 async function getTestUsers() {
   const { data: users, error } = await supabase.from('users').select('id').limit(NUM_TEST_USERS);
@@ -164,8 +194,8 @@ async function generateMessages() {
     ws.on('message', (data) => {
       const message = JSON.parse(data.toString());
       console.log(`User ${userId} received message:`, message);
-      if (message.type === WsMessageInputTypes.HEARTBEAT_INPUT) {
-        ws.send(JSON.stringify({ type: WsMessageInputTypes.HEARTBEAT_INPUT, content: {} }));
+      if (message.type === WsMessageTypes.HEARTBEAT) {
+        ws.send(JSON.stringify({ type: WsMessageTypes.HEARTBEAT, content: {} }));
       }
     });
 
@@ -222,7 +252,7 @@ async function generateMessages() {
 
             connection.ws.send(
               JSON.stringify({
-                messageType: WsMessageInputTypes.SUBSCRIBE_ROOM_INPUT,
+                messageType: WsMessageTypes.SUBSCRIBE_ROOM,
                 sender: connection.wallet.address,
                 signature,
                 content,
@@ -244,7 +274,7 @@ async function generateMessages() {
 
             connection.ws.send(
               JSON.stringify({
-                messageType: WsMessageInputTypes.SUBSCRIBE_ROOM_INPUT,
+                messageType: WsMessageTypes.SUBSCRIBE_ROOM,
                 sender: connection.wallet.address,
                 signature,
                 content,
@@ -259,7 +289,7 @@ async function generateMessages() {
 
           connection.ws.send(
             JSON.stringify({
-              messageType: WsMessageInputTypes.SUBSCRIBE_ROOM_INPUT,
+              messageType: WsMessageTypes.SUBSCRIBE_ROOM,
               sender: connection.wallet.address,
               signature,
               content,
@@ -278,37 +308,88 @@ async function generateMessages() {
       if (roomAndRound && connections.length > 0) {
         const activeConnection = connections[Math.floor(Math.random() * connections.length)];
         if (activeConnection.ws.readyState === WebSocket.OPEN) {
-          const rand = Math.random() * 0.6;
+          const rand = Math.random();
           let message;
 
           if (rand < BAD_MESSAGE_PROBABILITY) {
             message = generateBadMessage();
-          } else if (rand < 0.4) {
+          } else if (rand < 0.25) {
             // Public chat message
             const content = {
               roomId: roomAndRound.roomId,
               roundId: roomAndRound.roundId,
               userId: activeConnection.userId,
               text: getRandomMessage(),
+              timestamp: Date.now(),
             };
             const signature = await activeConnection.wallet.signMessage(JSON.stringify(content));
 
             message = {
-              messageType: WsMessageInputTypes.PUBLIC_CHAT_INPUT,
+              messageType: WsMessageTypes.PUBLIC_CHAT,
               sender: activeConnection.wallet.address,
               signature,
               content,
             } satisfies z.infer<typeof publicChatMessageInputSchema>;
-          } else if (rand < 0.5) {
+          } else if (rand < 0.35) {
             // Participants request
             const content = {
               roomId: roomAndRound.roomId,
+              timestamp: Date.now(),
             };
 
             message = {
-              type: WsMessageInputTypes.PARTICIPANTS_INPUT,
+              messageType: WsMessageTypes.PARTICIPANTS,
               content,
             } satisfies z.infer<typeof participantsInputMessageSchema>;
+          } else if (rand < 0.45) {
+            // GM message
+            const content = {
+              roomId: roomAndRound.roomId,
+              roundId: roomAndRound.roundId,
+              text: getRandomGMMessage(),
+              timestamp: Date.now(),
+              gmId: 51,
+              targets: [],
+              ignoreErrors: false,
+              message: getRandomGMMessage(),
+            };
+
+            const signature = await backendEthersSigningWallet.signMessage(JSON.stringify(content));
+
+            message = {
+              messageType: WsMessageTypes.GM_MESSAGE,
+              sender: backendEthersSigningWallet.address,
+              signature,
+              content,
+            } satisfies z.infer<typeof gmMessageInputSchema>;
+          } else if (rand < 0.7) {
+            // Agent message via POST
+            try {
+              const content = {
+                roomId: roomAndRound.roomId,
+                roundId: roomAndRound.roundId,
+                text: getRandomAgentMessage(),
+                timestamp: Date.now(),
+                agentId: 51,
+              };
+              const signature = await activeConnection.wallet.signMessage(JSON.stringify(content));
+
+              const message: z.infer<typeof agentMessageInputSchema> = {
+                messageType: WsMessageTypes.AGENT_MESSAGE,
+                sender: activeConnection.wallet.address,
+                signature,
+                content,
+              };
+
+              const response = await axios.post(`${API_BASE_URL}/messages/agentMessage`, message);
+
+              console.log(`User ${activeConnection.userId} sent agent message via POST:`, {
+                message,
+                response: response.data,
+              });
+            } catch (error) {
+              console.error('Error sending agent message via POST:', error);
+            }
           }
 
           if (message) {

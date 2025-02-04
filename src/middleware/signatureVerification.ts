@@ -1,76 +1,47 @@
-import { getBytes, hashMessage, recoverAddress } from 'ethers';
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { SIGNATURE_WINDOW_MS } from '../config';
-
-export const signedRequestHeaderSchema = z
-  .object({
-    'x-authorization-signature': z.string(),
-  })
-  .passthrough();
+import { verifySignedMessage } from '../utils/auth';
 
 // Zod schema for auth data in body
 export const signedRequestBodySchema = z
   .object({
-    account: z.string(),
-    // Ensure timestamp is UTC unix timestamp in milliseconds
-    timestamp: z
-      .number()
-      .int()
-      .min(Date.now() - SIGNATURE_WINDOW_MS), //Reject records that wouldn't fall in the signature window in basic validation
+    sender: z.string(),
+    signature: z.string(),
+    content: z
+      .object({
+        // Ensure timestamp is UTC unix timestamp in milliseconds
+        timestamp: z
+          .number()
+          .int()
+          .min(Date.now() - SIGNATURE_WINDOW_MS), //Reject records that wouldn't fall in the signature window in basic validation
+      })
+      .passthrough(),
   })
   .passthrough();
 
-const extractAddressFromMessage = (message: string, signature: string): string => {
-  const hash = hashMessage(message);
-  const digest = getBytes(hash);
-  return recoverAddress(digest, signature);
-};
-
 export const signatureVerificationPlugin = async (
   request: FastifyRequest<{
-    Headers: z.infer<typeof signedRequestHeaderSchema>;
     Body: z.infer<typeof signedRequestBodySchema>;
   }>,
   reply: FastifyReply
 ) => {
   try {
-    const signature = request.headers['x-authorization-signature'];
-    if (!signature) {
-      return reply.code(401).send({
-        error: 'Missing signature header',
-      });
-    }
-
+    // Parse and validate the request body against the schema
     const body = signedRequestBodySchema.parse(request.body);
-    const now = Date.now(); // UTC timestamp
+    const { content, signature, sender } = body;
 
-    if (body.timestamp > now) {
-      return reply.code(401).send({
-        error:
-          'Timestamp is in the future. Ensure your timestamp is in millisecond precision and is in UTC.',
-        serverTime: now,
-        requestTime: body.timestamp,
-      });
-    }
-    if (now - body.timestamp > SIGNATURE_WINDOW_MS) {
-      return reply.code(401).send({
-        error:
-          'Signature expired. Please ensure your timestamp has millisecond precision, is in UTC, and is within 5000ms of the current time in UTC.',
-        serverTime: now,
-        requestTime: body.timestamp,
-        difference: now - body.timestamp,
-      });
-    }
+    const { error } = verifySignedMessage(
+      content,
+      signature,
+      sender,
+      content.timestamp,
+      SIGNATURE_WINDOW_MS
+    );
 
-    const messageToVerify = JSON.stringify(request.body);
-    const recoveredAddress = extractAddressFromMessage(messageToVerify, signature);
-
-    if (recoveredAddress.toLowerCase() !== body.account.toLowerCase()) {
+    if (error) {
       return reply.code(401).send({
-        error: 'Signature verification failed',
-        expected: body.account,
-        recovered: recoveredAddress,
+        error,
       });
     }
 
@@ -85,7 +56,7 @@ export const signatureVerificationPlugin = async (
 
     request.log.error(error);
     return reply.code(500).send({
-      error: 'Internal server error during signature verification',
+      error: `Internal server error during signature verification: ${error}`,
     });
   }
 };

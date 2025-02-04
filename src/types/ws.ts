@@ -1,83 +1,53 @@
-import { RoundMessage } from '../utils/schemas';
 import { AllPvpActions, PvpActions } from './pvp';
 
-export enum WsMessageInputTypes {
+export enum WsMessageTypes {
   // Sent by: Users in room
   // Purpose: Request to start receiving messages for a room
-  SUBSCRIBE_ROOM_INPUT = 'subscribe_room',
+  SUBSCRIBE_ROOM = 'subscribe_room',
   // Sent by: Users in room
   // Purpose: Send a message to the public chat
-  PUBLIC_CHAT_INPUT = 'public_chat',
+  PUBLIC_CHAT = 'public_chat',
   // Sent by: Single user
   // Purpose: Response to a health check from the WS Server
-  HEARTBEAT_INPUT = 'heartbeat',
+  HEARTBEAT = 'heartbeat',
   // Sent by: Single user
   // Purpose: Get the total number of participants in the room to display in the UI
-  PARTICIPANTS_INPUT = 'participants',
+  PARTICIPANTS = 'participants',
 
   // BELOW IS NOT YET IMPLEMENTED
   // Sent by: Agents in room
   // Purpose: Send a message to the other agents in the room
-  AGENT_MESSAGE_INPUT = 'agent_message',
+  AGENT_MESSAGE = 'agent_message',
 
   // BELOW IS NOT YET IMPLEMENTED
   // Sent by: ???
   // Purpose: Send a GM message to agents, must be treated with the highest priority to ensure round progresses
-  GM_MESSAGE_INPUT = 'gm_action',
-}
-
-export enum WsMessageOutputTypes {
-  // Response to: PUBLIC_CHAT_INPUT WS message input type
-  // Recipients: Users
-  // Purpose: Send a message received from PUBLIC_CHAT_INPUT to all users in the room
-  PUBLIC_CHAT_OUTPUT = 'public_chat',
-
-  // Response to: None (background process periodically health checks connected users)
-  // Recipients: Single user
-  // Purpose: Health check on a user in the room
-  HEARTBEAT_OUTPUT = 'heartbeat',
-
-  // Response to: PARTICIPANTS_INPUT WS message input type, also sent when connections are added or removed in room
-  // Recipients: Single user
-  // Purpose: Send the number of participants in the room to a single user, used solely to keep the UI updated
-  PARTICIPANTS_OUTPUT = 'participants', // payload containing the number of participants in the room
-
-  // Response to: ???
-  // Recipients: Single agent, Users
-  // Purpose: Send a high priority message to one or more agents to force the round to progress.
-  // Dual purpose: Message is relayed to AI Chat to inform subscribed users
-  GM_ACTION_OUTPUT = 'gm_action',
+  GM_MESSAGE = 'gm_message',
 
   // Response to: Any WS input message
   // Recipients: Single user
   // Purpose: Send a message to an individual user to inform them of something, typically used to notify of a failed action they took or a system error
-  SYSTEM_NOTIFICATION_OUTPUT = 'system_notification',
+  SYSTEM_NOTIFICATION = 'system_notification',
 
   // Response to: POST request to /rooms/:roomId/rounds/:roundId/observations
   // Recipients: Users
   // Purpose: Send an observation to all agents in the room
   // Dual purpose: Message is relayed to AI Chat to inform subscribed users of an observation presented to the agents
-  OBSERVATION_OUTPUT = 'observation', // Sent to all users in room and all agents.Render in AI Chat. Message relating to an observation from external data
-
-  // Response to: AGENT_MESSAGE_INPUT, POST /rooms/:roomId/rounds/:roundId/aiChat
-  // Recipients: Agents
-  // Purpose: Send a message received from AGENT_MESSAGE_INPUT to all other agents in the round. Intentionally contains no details about PvP actions.
-  AGENT_MESSAGE_OUTPUT = 'agent_message',
-
+  OBSERVATION = 'observation',
   // Response to: AGENT_MESSAGE_INPUT, POST /rooms/:roomId/rounds/:roundId/aiChat
   // Recipients: Users
   // Purpose: Send a message received from AGENT_MESSAGE_INPUT to all users in the room, message will contain details about what PvP actions were taken on the message
-  AI_CHAT_AGENT_MESSAGE_OUTPUT = 'ai_chat_agent_message',
+  AI_CHAT_AGENT_MESSAGE = 'ai_chat_agent_message',
 
   // Response to: POST request to /rounds/:roundId/pvp
   // Recipients: Users
   // Purpose: Informs users that a PvP action has been applied to an agent, be it a direct action or a status effect
-  AI_CHAT_PVP_ACTION = 'ai_chat_pvp_action',
+  AI_CHAT_PVP_ACTION_ENACTED = 'ai_chat_pvp_action_enacted',
 
   // Response to: None (background process monitors when a PvP status is removed and notifies users)
   // Recipients: Users
   // Purpose: Informs users that a PvP status has been removed from an agent
-  AI_CHAT_PVP_STATUS_REMOVED_OUTPUT = 'ai_chat_pvp_status_removed',
+  AI_CHAT_PVP_STATUS_REMOVED = 'ai_chat_pvp_status_removed',
 }
 
 export interface AuthenticatedMessage {
@@ -86,24 +56,21 @@ export interface AuthenticatedMessage {
 }
 
 export interface SubscribeRoomInputMessage {
-  type: WsMessageInputTypes.SUBSCRIBE_ROOM_INPUT;
+  type: WsMessageTypes.SUBSCRIBE_ROOM;
   content: {
     roomId: number;
   };
 }
 
-
-
 export interface HeartbeatInputMessage {
-  type: WsMessageInputTypes.HEARTBEAT_INPUT;
+  type: WsMessageTypes.HEARTBEAT;
   content: {};
 }
-
 
 export type HeartbeatOutputMessage = HeartbeatInputMessage; //Backend + user both use the same heartbeat message
 
 export interface GMOutputMessage extends AuthenticatedMessage {
-  type: WsMessageOutputTypes.GM_ACTION_OUTPUT;
+  type: WsMessageTypes.GM_MESSAGE;
   content: {
     timestamp: number;
     roomId?: number;
@@ -113,7 +80,6 @@ export interface GMOutputMessage extends AuthenticatedMessage {
     };
   };
 }
-
 
 export interface ObservationWalletBalanceData {
   walletBalances: {
@@ -135,7 +101,7 @@ export interface ObservationPriceData {
 }
 
 export interface AiChatPvpStatusAppliedOutputMessage {
-  type: WsMessageOutputTypes.AI_CHAT_PVP_ACTION;
+  type: WsMessageTypes.AI_CHAT_PVP_ACTION_ENACTED;
   content: {
     timestamp: number;
     roomId: number; //Room id could be useful for player facing message since user subscribed to room, not round
@@ -148,7 +114,7 @@ export interface AiChatPvpStatusAppliedOutputMessage {
 }
 
 export interface AiChatPvpStatusRemovedOutputMessage {
-  type: WsMessageOutputTypes.AI_CHAT_PVP_STATUS_REMOVED_OUTPUT;
+  type: WsMessageTypes.AI_CHAT_PVP_STATUS_REMOVED;
   content: {
     timestamp: number;
     roomId: number; //Room id could be useful for player facing message since user subscribed to room, not round
@@ -162,4 +128,4 @@ export interface AiChatPvpStatusRemovedOutputMessage {
 export type WsRoomLevelOutputTypes =
   | GMOutputMessage
   | AiChatPvpStatusAppliedOutputMessage
-  | AiChatPvpStatusRemovedOutputMessage
+  | AiChatPvpStatusRemovedOutputMessage;

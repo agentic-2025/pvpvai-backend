@@ -8,9 +8,14 @@
 
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { processAgentMessage, processObservationMessage } from '../utils/messageHandler';
+import {
+  processAgentMessage,
+  processGmMessage,
+  processObservationMessage,
+} from '../utils/messageHandler';
 import {
   agentMessageInputSchema,
+  gmMessageInputSchema,
   messagesRestResponseSchema,
   observationMessageInputSchema,
 } from '../utils/schemas';
@@ -24,7 +29,7 @@ export async function messagesRoutes(server: FastifyInstance) {
     Body: z.infer<typeof observationMessageInputSchema>;
     Reply: z.infer<typeof messagesRestResponseSchema>;
   }>(
-    '/messages/observations',
+    '/observations',
     {
       schema: {
         body: {
@@ -69,42 +74,45 @@ export async function messagesRoutes(server: FastifyInstance) {
     Body: z.infer<typeof agentMessageInputSchema>;
     Reply: z.infer<typeof messagesRestResponseSchema>;
   }>(
-    '/messages/agentMessage',
+    '/agentMessage',
+    {
+      schema: {
+        body: {
+          type: 'object',
+          required: ['signature', 'messageType', 'sender', 'content'],
+        },
+      },
+    },
+    async (request, reply) => {
+      console.log('processing agent message', request.body);
+      const result = await processAgentMessage(request.body);
+      return reply.status(result.statusCode).send({
+        message: result.message,
+        data: result.data,
+        error: result.error?.toString(),
+      });
+    }
+  );
+
+  // TODO This is a debug route, remove before prod unless it ends up being useful
+  // Create a new GM message
+  server.post<{
+    Body: z.infer<typeof gmMessageInputSchema>;
+    Reply: z.infer<typeof messagesRestResponseSchema>;
+  }>(
+    '/gmMessage',
     {
       schema: {
         body: {
           type: 'object',
           required: ['roomId', 'roundId', 'message'],
-          properties: {
-            roomId: { type: 'string' },
-            roundId: { type: 'string' },
-            message: { type: 'string' },
-          },
-        },
-        response: {
-          200: {
-            type: 'object',
-            required: ['message', 'data', 'error'],
-            properties: {
-              message: { type: 'string' },
-              data: {
-                type: 'object',
-                additionalProperties: true,
-              },
-              error: {
-                type: ['string', 'null'],
-              },
-            },
-          },
         },
       },
     },
     async (request, reply) => {
-      const result = await processAgentMessage(request.body);
+      const result = await processGmMessage(request.body);
       return reply.status(result.statusCode).send({
         message: result.message,
-        data: result.data,
-        error: result.error,
       });
     }
   );

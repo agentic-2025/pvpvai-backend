@@ -1,5 +1,5 @@
 import { supabase } from '../config';
-import { Database } from '../types/database.types';
+import { Database, Tables } from '../types/database.types';
 import { RoomOperationResult } from '../types/roomTypes';
 
 export class RoomService {
@@ -116,6 +116,19 @@ export class RoomService {
     } catch (err) {
       console.error('Error bulk adding agents:', err);
       return { success: false, error: 'Failed to bulk add agents' };
+    }
+  }
+
+  async getRoomAgents(roomId: number): Promise<RoomOperationResult<Tables<'room_agents'>[]>> {
+    try {
+      const { data, error } = await supabase.from('room_agents').select('*').eq('room_id', roomId);
+      if (error) {
+        return { success: false, error: error.message };
+      }
+      return { success: true, data };
+    } catch (err) {
+      console.error('Error getting room agents:', err);
+      return { success: false, error: 'Failed to get room agents' };
     }
   }
 }

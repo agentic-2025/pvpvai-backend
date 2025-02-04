@@ -1,21 +1,18 @@
 import { WebSocket } from 'ws';
 import { z } from 'zod';
-import { supabase } from '../config';
+import { SIGNATURE_WINDOW_MS, supabase } from '../config';
 import { Database } from '../types/database.types';
-import {
-  HeartbeatOutputMessage,
-  SubscribeRoomInputMessage,
-  WsMessageInputTypes,
-  WsMessageOutputTypes,
-} from '../types/ws';
-import { roundPreflight } from '../utils/validation';
+import { HeartbeatOutputMessage, SubscribeRoomInputMessage, WsMessageTypes } from '../types/ws';
+import { processGmMessage } from '../utils/messageHandler';
 import {
   participantsInputMessageSchema,
   participantsOutputMessageSchema,
   publicChatMessageInputSchema,
   systemNotificationOutputSchema,
+  gmMessageInputSchema,
 } from '../utils/schemas';
-import { processGmMessage } from '../utils/messageHandler';
+import { roundPreflight } from '../utils/validation';
+import { verifySignedMessage } from '../utils/auth';
 
 export type RoomMap = Map<number, Set<WebSocket>>;
 export type ClientInfo = Map<WebSocket, { roomId: number }>;
@@ -43,7 +40,7 @@ export class WSOperations {
     originalMessage?: any
   ) {
     const message: z.infer<typeof systemNotificationOutputSchema> = {
-      messageType: WsMessageOutputTypes.SYSTEM_NOTIFICATION_OUTPUT,
+      messageType: WsMessageTypes.SYSTEM_NOTIFICATION,
       content: {
         timestamp: Date.now(),
         text,
@@ -102,7 +99,7 @@ export class WSOperations {
   async broadcastParticipantsToRoom(params: { roomId: number; count: number }): Promise<void> {
     const { roomId, count } = params;
     const message: z.infer<typeof participantsOutputMessageSchema> = {
-      messageType: WsMessageOutputTypes.PARTICIPANTS_OUTPUT,
+      messageType: WsMessageTypes.PARTICIPANTS,
       content: {
         timestamp: Date.now(),
         roomId,
@@ -159,7 +156,19 @@ export class WSOperations {
     //TODO implement signature auth here, sending a message requires the user to be logged in.
 
     try {
-      const { roundId } = message.content;
+      const {signature, sender, content} = message;
+      const { roundId, timestamp } = message.content;
+      const { error: signatureError } = verifySignedMessage(
+        content,
+        signature,
+        sender,
+        timestamp,
+        SIGNATURE_WINDOW_MS
+      );
+      if (signatureError) {
+        await this.sendSystemMessage(client, signatureError, true, message);
+        return;
+      }
 
       const { round, valid, reason } = await roundPreflight(roundId);
       if (!valid) {
@@ -199,7 +208,7 @@ export class WSOperations {
       const count = connections?.size || 0;
 
       const response: z.infer<typeof participantsOutputMessageSchema> = {
-        messageType: WsMessageOutputTypes.PARTICIPANTS_OUTPUT,
+        messageType: WsMessageTypes.PARTICIPANTS,
         content: {
           timestamp: Date.now(),
           roomId,
@@ -213,50 +222,17 @@ export class WSOperations {
     }
   }
 
-  //TODO have to fix message type
-  async handleGMChat(client: WebSocket, message: any): Promise<void> {
-    try {
-      const { roomId, roundId, content, gmId } = message.content;
-      const { text } = content;
-      if (!roomId || !roundId || !text || !gmId) {
-        throw new Error(
-          'Invalid GM Message, needs content.room_id, content.round_id, content.text, and content.gmId'
-        );
-      }
-      const { round, valid, reason } = await roundPreflight(roundId);
-      if (!valid) {
-        throw new Error('Round not valid: ' + reason);
-      }
-
-      const res = await processGmMessage(message);
-
-      // Broadcast to all participants concurrently
-      await this.broadcastToAiChat({
-        roomId,
-        record: {
-          round_id: roundId,
-          agent_id: gmId,
-          original_author: gmId, //TODO yep still not sure why I did this
-          message_type: message.type,
-          pvp_status_effects: null,
-          message,
-        },
-      });
-      console.log(
-        `Message from GM ${message.author} broadcasted to room #${message.content.roomId}`,
-        message
-      );
-    } catch (error) {
-      console.error(`Failed to handle GM chat message:`, error);
-      await this.sendSystemMessage(client, 'Failed to handle GM chat message', true, message);
-    }
-  }
 
   // Update subscribe room handler
   async handleSubscribeRoom(client: WebSocket, message: SubscribeRoomInputMessage): Promise<void> {
     try {
       if (!message.content?.roomId) {
-        await this.sendSystemMessage(client, 'Subscribe message needs content.room_id', true, message);
+        await this.sendSystemMessage(
+          client,
+          'Subscribe message needs content.room_id',
+          true,
+          message
+        );
         return;
       }
 
@@ -294,7 +270,12 @@ export class WSOperations {
       await this.broadcastParticipantsToRoom({ roomId: roomId, count: room.size });
     } catch (error) {
       console.error(`Failed to handle subscribe room message:`, error);
-      await this.sendSystemMessage(client, 'Failed to handle subscribe room message', true, message);
+      await this.sendSystemMessage(
+        client,
+        'Failed to handle subscribe room message',
+        true,
+        message
+      );
     }
   }
 
@@ -353,6 +334,17 @@ export class WSOperations {
     }
   }
 
+  // TODO This is a debug route, remove before prod
+  // Create a new GM message
+  async handleGmMessage(client: WebSocket, message: z.infer<typeof gmMessageInputSchema>): Promise<void> {
+    //Process GM message takes care of validation + broadcast including a variant of signature verification
+    const {error} = await processGmMessage(message);
+    if (error) {
+      await this.sendSystemMessage(client, error, true, message);
+    }
+    await this.sendSystemMessage(client, 'GM Message processed and stored', false, message);
+  }
+  
   setupHeartbeat(client: WebSocket): NodeJS.Timeout {
     return setInterval(() => {
       if (this.clientHeartbeats.has(client)) {
@@ -361,7 +353,7 @@ export class WSOperations {
       }
 
       const heartbeatMessage: HeartbeatOutputMessage = {
-        type: WsMessageInputTypes.HEARTBEAT_INPUT,
+        type: WsMessageTypes.HEARTBEAT,
         content: {},
       };
       client.send(JSON.stringify(heartbeatMessage));

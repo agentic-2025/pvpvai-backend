@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { WsMessageInputTypes, WsMessageOutputTypes } from '../types/ws';
+import { PvpActions, PvpActionTypes } from '../types/pvp';
+import { WsMessageTypes } from '../types/ws';
 
 /* 
   OBSERVATION MESSAGES SCHEMA:
@@ -52,6 +53,7 @@ export const publicChatMessageInputSchema = z.object({
   signature: z.string(),
   sender: z.string(),
   content: z.object({
+    timestamp: z.number(),
     roomId: z.number(),
     roundId: z.number(),
     userId: z.number(),
@@ -89,7 +91,7 @@ export const agentMessageInputSchema = z.object({
 export const agentMessageAgentOutputSchema = agentMessageInputSchema;
 // Message sent to AI Chat (players) includes PvP details
 export const agentMessageAiChatOutputSchema = z.object({
-  messageType: z.literal("agent_message"),
+  messageType: z.literal('agent_message'),
   content: z.object({
     timestamp: z.number(),
     roomId: z.number(),
@@ -135,7 +137,6 @@ export const systemNotificationOutputSchema = z.object({
   }),
 });
 
-
 /*
   PARTICIPANTS MESSAGES SCHEMA:
   Sent by: 
@@ -148,18 +149,78 @@ export const systemNotificationOutputSchema = z.object({
   Purpose: Gives the user the number of participants in the room
 */
 export const participantsInputMessageSchema = z.object({
-  messageType: z.literal("participants"),
+  messageType: z.literal('participants'),
   content: z.object({
     roomId: z.number().int().positive(),
   }),
 });
 
 export const participantsOutputMessageSchema = z.object({
-  messageType: z.literal("participants"),
+  messageType: z.literal('participants'),
   content: z.object({
     timestamp: z.number().int().positive(),
     roomId: z.number().int().positive(),
     count: z.number().int().nonnegative(),
+  }),
+});
+
+/*
+  GM MESSAGES SCHEMA:
+  Sent by:
+    - GM over ???
+  Received by:
+    - One or more agents: gmMessageAgentOutputSchema
+    - All users in the room: gmMessageAiChatOutputSchema
+  Purpose: Sent when the GM wants to send a message to all agents or all users in the room
+*/
+export const gmMessageInputSchema = z.object({
+  messageType: z.literal('gm_message'),
+  signature: z.string(),
+  sender: z.string(),
+  content: z.object({
+    gmId: z.number(),
+    timestamp: z.number(),
+    targets: z.array(z.number()), // List of agent ids to send the message to
+    roomId: z.number(),
+    roundId: z.number(),
+    message: z.string(),
+    deadline: z.number().optional(), // Time in which the Agent must respond to the GM message before slashing/kicking
+    additionalData: z.record(z.string(), z.any()).optional(),
+    ignoreErrors: z.boolean().optional().default(false), // There are a few checks that a GM can ignore, like if the round is open or not, in case of emergency
+  }),
+});
+export const gmMessageAgentOutputSchema = gmMessageInputSchema; // GM messages are passthrough to agents
+export const gmMessageAiChatOutputSchema = gmMessageInputSchema; // GM messages are passthrough to AI Chat
+
+/*
+  PVP_ACTION_ENACTED MESSAGES SCHEMA:
+  Sent by:
+  - WS: Backend
+  Received by:
+  - Users in the room: aiChatPvpActionEnactedOutputSchema
+  - (TODO Agents with the clairvoyance buff)
+  Purpose: Sent when the Backend (or GM?) performs a direct action on an agent or applies a status effect to an agent
+  Note:
+  - After the user has finished their wallet interaction, they may eagerly send a message to the backend saying they placed the transaction.
+  - The backend can then echo the message to that user individually so the user gets early feedback when they took an action
+ */
+export const aiChatPvpActionEnactedOutputSchema = z.object({
+  messageType: z.literal('pvp_action_enacted'),
+  signature: z.string(),
+  sender: z.string(),
+  content: z.object({
+    timestamp: z.number(),
+    roomId: z.number(),
+    roundId: z.number(),
+    instigator: z.number(),
+    txHash: z.string(),
+    fee: z.number().optional(),
+    action: z.object({
+      type: z.nativeEnum(PvpActions),
+      actionType: z.nativeEnum(PvpActionTypes),
+      targets: z.number(),
+      parameters: z.record(z.string(), z.any()),
+    }), //TODO replace with actual PvP action schema
   }),
 });
 
@@ -181,13 +242,13 @@ export type AllInputSchemaTypes =
   | z.infer<typeof observationMessageInputSchema>
   | z.infer<typeof agentMessageInputSchema>
   | z.infer<typeof publicChatMessageInputSchema>
-  | z.infer<typeof participantsInputMessageSchema>
-  ;
+  | z.infer<typeof participantsInputMessageSchema>;
 
 // All types of messages that will be sent to/received by agents
 export type AllAgentChatMessageSchemaTypes =
   | z.infer<typeof observationMessageAgentOutputSchema>
-  | z.infer<typeof agentMessageAgentOutputSchema>;
+  | z.infer<typeof agentMessageAgentOutputSchema>
+  | z.infer<typeof gmMessageAgentOutputSchema>;
 //TODO GM message type will go here;
 
 // All types of messages that will be sent to/received by users to render in AI Chat
@@ -262,7 +323,7 @@ export const authenticatedMessageSchema = z.object({
 
 // Add the agent message input schema
 export const roundMessageInputSchema = authenticatedMessageSchema.extend({
-  type: z.literal(WsMessageInputTypes.AGENT_MESSAGE_INPUT),
+  type: z.literal(WsMessageTypes.AGENT_MESSAGE),
   content: z.object({
     agentId: z.number().int().positive(),
     roundId: z.number().int().positive(),
