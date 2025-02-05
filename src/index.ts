@@ -8,6 +8,7 @@ import roomsRoutes from './rooms';
 import { agentRoutes } from './routes/agentRoutes';
 import { messagesRoutes } from './routes/messageRoutes';
 import { WsMessageTypes } from './types/ws';
+import { AllInputSchemaTypes } from './utils/schemas';
 
 const server = fastify({
   logger: true,
@@ -64,9 +65,10 @@ server.register(async function (fastify) {
 
     client.on('message', async (message: Buffer) => {
       try {
-        const data = JSON.parse(message.toString());
+        const data: AllInputSchemaTypes = JSON.parse(message.toString());
+        console.log(`Received ${data.messageType} message...`);
 
-        switch (data.type) {
+        switch (data.messageType) {
           case WsMessageTypes.SUBSCRIBE_ROOM:
             wsOps.handleSubscribeRoom(client, data);
             break;
@@ -87,23 +89,19 @@ server.register(async function (fastify) {
             await wsOps.handleGmMessage(client, data);
             break;
 
-
+          default:
+            wsOps.sendSystemMessage(
+              client,
+              'Invalid message type ' +
+                data.messageType +
+                ', please pass a supported message type:' +
+                Object.values(WsMessageTypes).join(', '),
+              true,
+              data
+            );
         }
       } catch (err) {
-        client.send(
-          JSON.stringify({
-            type: 'system_notification',
-            timestamp: Date.now(),
-            signature: '',
-            content: {
-              content: {
-                author: 'system',
-                room_id: '',
-                text: 'Invalid message type',
-              },
-            },
-          })
-        );
+        wsOps.sendSystemMessage(client, 'Hit error handling message: ' + err, true, message);
       }
     });
 

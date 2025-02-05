@@ -7,9 +7,12 @@ import { Tables } from '../types/database.types';
 import { WsMessageTypes } from '../types/ws';
 import { signMessage, verifySignedMessage } from './auth';
 import {
+  agentMessageAiChatOutputSchema,
   agentMessageInputSchema,
   AllAgentChatMessageSchemaTypes,
+  gmMessageAiChatOutputSchema,
   gmMessageInputSchema,
+  observationMessageAiChatOutputSchema,
   observationMessageInputSchema,
 } from './schemas';
 import { roundAndAgentsPreflight } from './validation';
@@ -86,7 +89,9 @@ export async function processObservationMessage(
         round_id: roundId,
         pvp_status_effects: {},
         message_type: WsMessageTypes.OBSERVATION,
-        message: JSON.stringify(observation),
+        message: JSON.stringify(
+          observation satisfies z.infer<typeof observationMessageAiChatOutputSchema>
+        ),
       },
     });
 
@@ -109,13 +114,49 @@ export async function processAgentMessage(
 ): Promise<ProcessMessageResponse> {
   try {
     console.log('processing agent message', message);
+    const { signer, error: signatureError } = verifySignedMessage(
+      message.content,
+      message.signature,
+      message.sender,
+      message.content.timestamp,
+      SIGNATURE_WINDOW_MS
+    );
+    if (signatureError) {
+      return {
+        error: signatureError,
+        statusCode: 401,
+      };
+    }
+
+    console.log('processing agent message', message);
     const { roomId, roundId } = message.content;
     const {
       round,
       agents,
+      roundAgents,
       valid: roundValid,
       reason: roundReason,
     } = await roundAndAgentsPreflight(roundId);
+
+    console.log('agents', agents);
+    console.log('signer', signer);
+    console.log('message.content.agentId', message.content.agentId);
+    const roomAgents = await roomService.getRoomAgents(roomId);
+    console.log('roomAgents', roomAgents);
+
+    const senderAgent = roomAgents?.data?.find((a) => a.agent_id === message.content.agentId);
+    if (signer !== senderAgent?.wallet_address) {
+      console.log(
+        'signer does not match agent address in room_agents, expected',
+        senderAgent?.wallet_address,
+        'but got',
+        signer
+      );
+      return {
+        error: `signer does not match agent address for agent ${message.content.agentId} in room_agents, expected "${senderAgent?.wallet_address}" but got "${signer}"`,
+        statusCode: 400,
+      };
+    }
 
     if (!roundValid) {
       return {
@@ -132,16 +173,18 @@ export async function processAgentMessage(
 
     // Apply PvP rules to message
     // TODO When PvP is fully implemented, apply PvP rules to the message
-    // const pvpResult = await applyPvp(message);
-    const postPvpMessage = message;
 
+    const postPvpMessages: Record<number, any> = {};
     const backendSignature = await signMessage(message.content);
     // Send processed message to all agents in the round
     for (const agent of agents) {
+      // const pvpResult = await applyPvp(message, agent, round.pvp_status_effects);
+      const postPvpMessage = message;
+      postPvpMessages[agent.id] = postPvpMessage;
       await sendMessageToAgent({
         agent,
         message: {
-          ...postPvpMessage,
+          ...message,
           signature: backendSignature,
           sender: backendEthersSigningWallet.address,
         },
@@ -156,8 +199,22 @@ export async function processAgentMessage(
         round_id: roundId,
         original_author: message.content.agentId, //Not sure what I was thinking with this column.
         pvp_status_effects: round.pvp_status_effects,
-        message_type: WsMessageTypes.AI_CHAT_AGENT_MESSAGE,
-        message: JSON.stringify(postPvpMessage),
+        message_type: WsMessageTypes.AGENT_MESSAGE,
+        message: {
+          messageType: WsMessageTypes.AGENT_MESSAGE,
+          content: {
+            timestamp: message.content.timestamp,
+            roomId,
+            roundId,
+            senderId: message.content.agentId,
+            originalMessage: message,
+            originalTargets: agents
+              .filter((a) => a.id !== message.content.agentId)
+              .map((a) => a.id),
+            postPvpMessages: postPvpMessages,
+            pvpStatusEffects: JSON.parse((round.pvp_status_effects as string) || '{}'),
+          },
+        } satisfies z.infer<typeof agentMessageAiChatOutputSchema>,
       },
     });
 
@@ -329,7 +386,7 @@ export async function processGmMessage(
         original_author: gmId, //Not sure what I was thinking with this column.
         pvp_status_effects: {},
         message_type: WsMessageTypes.GM_MESSAGE,
-        message: JSON.stringify(message),
+        message: JSON.stringify(message satisfies z.infer<typeof gmMessageAiChatOutputSchema>),
       },
     });
 

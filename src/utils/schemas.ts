@@ -1,6 +1,42 @@
 import { z } from 'zod';
-import { PvpActions, PvpActionTypes } from '../types/pvp';
+import { PvpActionCategories, PvpActions } from '../types/pvp';
 import { WsMessageTypes } from '../types/ws';
+
+/*
+  SUBSCRIBE ROOM MESSAGES SCHEMA:
+  Sent by:
+    - WS: Users on room load over WS
+  Received by: 
+    - Single user: subscribeRoomOutputMessageSchema
+  Supported by:
+    - WS exclusive
+  Purpose: Gives the user the number of participants in the room
+*/
+export const subscribeRoomInputMessageSchema = z.object({
+  messageType: z.literal(WsMessageTypes.SUBSCRIBE_ROOM),
+  content: z.object({
+    roomId: z.number(),
+  }),
+});
+
+export const subscribeRoomOutputMessageSchema = subscribeRoomInputMessageSchema; //Passthrough
+
+/*
+  HEARTBEAT MESSAGES SCHEMA:
+  Sent by:
+    - WS: Users send this in response to a heartbeat message from the server
+  Received by: 
+    - Single user: heartbeatOutputMessageSchema
+  Supported by:
+    - WS exclusive
+  Purpose: Keeps the user's connection alive
+*/
+export const heartbeatInputMessageSchema = z.object({
+  messageType: z.literal(WsMessageTypes.HEARTBEAT),
+  content: z.object({}),
+});
+
+export const heartbeatOutputMessageSchema = heartbeatInputMessageSchema; //Passthrough
 
 /* 
   OBSERVATION MESSAGES SCHEMA:
@@ -75,7 +111,7 @@ export const publicChatMessageOutputSchema = publicChatMessageInputSchema; //Pas
   Purpose: Messages from agents to the room and other agents.
 */
 export const agentMessageInputSchema = z.object({
-  messageType: z.literal('agent_message'),
+  messageType: z.literal(WsMessageTypes.AGENT_MESSAGE),
   signature: z.string(), // GM receives message signed by agent
   sender: z.string(),
   content: z.object({
@@ -91,24 +127,15 @@ export const agentMessageInputSchema = z.object({
 export const agentMessageAgentOutputSchema = agentMessageInputSchema;
 // Message sent to AI Chat (players) includes PvP details
 export const agentMessageAiChatOutputSchema = z.object({
-  messageType: z.literal('agent_message'),
+  messageType: z.literal(WsMessageTypes.AGENT_MESSAGE),
   content: z.object({
     timestamp: z.number(),
     roomId: z.number(),
     roundId: z.number(),
     senderId: z.number(),
-    originalMessages: z.array(
-      z.object({
-        agentId: z.number(),
-        message: z.any(),
-      })
-    ),
-    postPvpMessages: z.array(
-      z.object({
-        agentId: z.number(),
-        message: z.any(),
-      })
-    ),
+    originalMessage: agentMessageInputSchema,
+    originalTargets: z.array(z.number()),
+    postPvpMessages: z.record(z.string(), agentMessageAgentOutputSchema),
     pvpStatusEffects: z.record(z.string(), z.array(z.any())), //TODO replace with actual PvP status effect schema
   }),
 });
@@ -126,7 +153,7 @@ export const agentMessageAiChatOutputSchema = z.object({
   Note: As this cannot be received no input schema is needed.
 */
 export const systemNotificationOutputSchema = z.object({
-  messageType: z.literal('system_notification'),
+  messageType: z.literal(WsMessageTypes.SYSTEM_NOTIFICATION),
   content: z.object({
     timestamp: z.number(),
     roomId: z.number().optional(),
@@ -149,14 +176,14 @@ export const systemNotificationOutputSchema = z.object({
   Purpose: Gives the user the number of participants in the room
 */
 export const participantsInputMessageSchema = z.object({
-  messageType: z.literal('participants'),
+  messageType: z.literal(WsMessageTypes.PARTICIPANTS),
   content: z.object({
     roomId: z.number().int().positive(),
   }),
 });
 
 export const participantsOutputMessageSchema = z.object({
-  messageType: z.literal('participants'),
+  messageType: z.literal(WsMessageTypes.PARTICIPANTS),
   content: z.object({
     timestamp: z.number().int().positive(),
     roomId: z.number().int().positive(),
@@ -174,7 +201,7 @@ export const participantsOutputMessageSchema = z.object({
   Purpose: Sent when the GM wants to send a message to all agents or all users in the room
 */
 export const gmMessageInputSchema = z.object({
-  messageType: z.literal('gm_message'),
+  messageType: z.literal(WsMessageTypes.GM_MESSAGE),
   signature: z.string(),
   sender: z.string(),
   content: z.object({
@@ -204,8 +231,99 @@ export const gmMessageAiChatOutputSchema = gmMessageInputSchema; // GM messages 
   - After the user has finished their wallet interaction, they may eagerly send a message to the backend saying they placed the transaction.
   - The backend can then echo the message to that user individually so the user gets early feedback when they took an action
  */
-export const aiChatPvpActionEnactedOutputSchema = z.object({
-  messageType: z.literal('pvp_action_enacted'),
+const durationOptionsSchema = z.union([z.literal(5), z.literal(10), z.literal(30)]);
+
+// Create schemas for each PvP action type
+const amnesiaActionSchema = z.object({
+  actionType: z.literal(PvpActions.AMNESIA),
+  actionCategory: z.literal(PvpActionCategories.DIRECT_ACTION),
+  parameters: z.object({
+    target: z.number(),
+  }),
+});
+
+const attackActionSchema = z.object({
+  actionType: z.literal(PvpActions.ATTACK),
+  actionCategory: z.literal(PvpActionCategories.DIRECT_ACTION),
+  parameters: z.object({
+    target: z.number(),
+    message: z.string(),
+  }),
+});
+
+const deceiveStatusSchema = z.object({
+  actionType: z.literal(PvpActions.DECEIVE),
+  actionCategory: z.literal(PvpActionCategories.STATUS_EFFECT),
+  parameters: z.object({
+    target: z.number(),
+    duration: durationOptionsSchema,
+    newPersona: z.string(),
+  }),
+});
+
+const blindStatusSchema = z.object({
+  actionType: z.literal(PvpActions.BLIND),
+  actionCategory: z.literal(PvpActionCategories.STATUS_EFFECT),
+  parameters: z.object({
+    target: z.number(),
+    duration: durationOptionsSchema,
+  }),
+});
+
+const silenceStatusSchema = z.object({
+  actionType: z.literal(PvpActions.SILENCE),
+  actionCategory: z.literal(PvpActionCategories.STATUS_EFFECT),
+  parameters: z.object({
+    target: z.number(),
+    duration: durationOptionsSchema,
+  }),
+});
+
+const deafenStatusSchema = z.object({
+  actionType: z.literal(PvpActions.DEAFEN),
+  actionCategory: z.literal(PvpActionCategories.STATUS_EFFECT),
+  parameters: z.object({
+    target: z.number(),
+    duration: durationOptionsSchema,
+  }),
+});
+
+const poisonStatusSchema = z.object({
+  actionType: z.literal(PvpActions.POISON),
+  actionCategory: z.literal(PvpActionCategories.STATUS_EFFECT),
+  parameters: z.object({
+    target: z.number(),
+    duration: durationOptionsSchema,
+    find: z.string(),
+    replace: z.string(),
+    case_sensitive: z.boolean(),
+  }),
+});
+
+// Combine all action schemas
+const pvpActionSchema = z.discriminatedUnion('actionType', [
+  amnesiaActionSchema,
+  attackActionSchema,
+  deceiveStatusSchema,
+  blindStatusSchema,
+  silenceStatusSchema,
+  deafenStatusSchema,
+  poisonStatusSchema,
+]);
+
+export type PvpAttackActionType = z.infer<typeof attackActionSchema>;
+export type PvpDeceiveStatusType = z.infer<typeof deceiveStatusSchema>;
+export type PvpBlindStatusType = z.infer<typeof blindStatusSchema>;
+export type PvpSilenceStatusType = z.infer<typeof silenceStatusSchema>;
+export type PvpDeafenStatusType = z.infer<typeof deafenStatusSchema>;
+export type PvpPoisonStatusType = z.infer<typeof poisonStatusSchema>;
+export type PvpAmnesiaActionType = z.infer<typeof amnesiaActionSchema>;
+
+export type PvpAllPvpActionsType = z.infer<typeof pvpActionSchema>;
+
+// Update the pvpActionEnactedAiChatOutputSchema
+export const pvpActionEnactedAiChatOutputSchema = z.object({
+  messageType: z.literal(WsMessageTypes.PVP_ACTION_ENACTED),
   signature: z.string(),
   sender: z.string(),
   content: z.object({
@@ -213,14 +331,10 @@ export const aiChatPvpActionEnactedOutputSchema = z.object({
     roomId: z.number(),
     roundId: z.number(),
     instigator: z.number(),
+    instigatorAddress: z.string(),
     txHash: z.string(),
     fee: z.number().optional(),
-    action: z.object({
-      type: z.nativeEnum(PvpActions),
-      actionType: z.nativeEnum(PvpActionTypes),
-      targets: z.number(),
-      parameters: z.record(z.string(), z.any()),
-    }), //TODO replace with actual PvP action schema
+    action: pvpActionSchema,
   }),
 });
 
@@ -242,7 +356,10 @@ export type AllInputSchemaTypes =
   | z.infer<typeof observationMessageInputSchema>
   | z.infer<typeof agentMessageInputSchema>
   | z.infer<typeof publicChatMessageInputSchema>
-  | z.infer<typeof participantsInputMessageSchema>;
+  | z.infer<typeof participantsInputMessageSchema>
+  | z.infer<typeof gmMessageInputSchema>
+  | z.infer<typeof heartbeatInputMessageSchema>
+  | z.infer<typeof subscribeRoomInputMessageSchema>;
 
 // All types of messages that will be sent to/received by agents
 export type AllAgentChatMessageSchemaTypes =
@@ -254,9 +371,9 @@ export type AllAgentChatMessageSchemaTypes =
 // All types of messages that will be sent to/received by users to render in AI Chat
 export type AllAiChatMessageSchemaTypes =
   | z.infer<typeof observationMessageAiChatOutputSchema>
-  | z.infer<typeof agentMessageAiChatOutputSchema>;
-//TODO PVP and GM message types will go here;
-
+  | z.infer<typeof agentMessageAiChatOutputSchema>
+  | z.infer<typeof gmMessageAiChatOutputSchema>
+  | z.infer<typeof pvpActionEnactedAiChatOutputSchema>;
 // Common schemas
 export const walletAddressSchema = z.string().regex(/^0x[a-fA-F0-9]{40}$/);
 export const signatureSchema = z.string();

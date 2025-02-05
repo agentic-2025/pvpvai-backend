@@ -2,14 +2,16 @@ import { WebSocket } from 'ws';
 import { z } from 'zod';
 import { SIGNATURE_WINDOW_MS, supabase } from '../config';
 import { Database } from '../types/database.types';
-import { HeartbeatOutputMessage, SubscribeRoomInputMessage, WsMessageTypes } from '../types/ws';
+import { WsMessageTypes } from '../types/ws';
 import { verifySignedMessage } from '../utils/auth';
 import { processGmMessage } from '../utils/messageHandler';
 import {
   gmMessageInputSchema,
+  heartbeatOutputMessageSchema,
   participantsInputMessageSchema,
   participantsOutputMessageSchema,
   publicChatMessageInputSchema,
+  subscribeRoomInputMessageSchema,
   systemNotificationOutputSchema,
 } from '../utils/schemas';
 import { roundPreflight } from '../utils/validation';
@@ -154,6 +156,7 @@ export class WSOperations {
     message: z.infer<typeof publicChatMessageInputSchema>
   ): Promise<void> {
     //TODO implement signature auth here, sending a message requires the user to be logged in.
+    console.log('Handling public chat message', message);
 
     try {
       const { signature, sender, content } = message;
@@ -166,12 +169,14 @@ export class WSOperations {
         SIGNATURE_WINDOW_MS
       );
       if (signatureError) {
+        console.log('Public chat message failed signature verification', signatureError);
         await this.sendSystemMessage(client, signatureError, true, message);
         return;
       }
 
       const { round, valid, reason } = await roundPreflight(roundId);
       if (!valid) {
+        console.log('Public chat message failed round preflight', reason);
         await this.sendSystemMessage(client, reason, true, message);
         return;
       }
@@ -181,13 +186,14 @@ export class WSOperations {
         record: {
           round_id: roundId,
           user_id: message.content.userId,
-          message: message.content.text,
+          message: message,
         },
         excludeConnection: client,
       });
 
       console.log(
-        `Message #${JSON.stringify(message)} from user ${message.sender} broadcasted to room #${round.room_id}`
+        `Public chat message from user ${message.sender} broadcasted to room #${round.room_id}`,
+        message
       );
     } catch (error) {
       console.error(`Failed to handle public chat message:`, error);
@@ -223,7 +229,10 @@ export class WSOperations {
   }
 
   // Update subscribe room handler
-  async handleSubscribeRoom(client: WebSocket, message: SubscribeRoomInputMessage): Promise<void> {
+  async handleSubscribeRoom(
+    client: WebSocket,
+    message: z.infer<typeof subscribeRoomInputMessageSchema>
+  ): Promise<void> {
     try {
       if (!message.content?.roomId) {
         await this.sendSystemMessage(
@@ -354,8 +363,8 @@ export class WSOperations {
         this.cleanup(client);
       }
 
-      const heartbeatMessage: HeartbeatOutputMessage = {
-        type: WsMessageTypes.HEARTBEAT,
+      const heartbeatMessage: z.infer<typeof heartbeatOutputMessageSchema> = {
+        messageType: WsMessageTypes.HEARTBEAT,
         content: {},
       };
       client.send(JSON.stringify(heartbeatMessage));

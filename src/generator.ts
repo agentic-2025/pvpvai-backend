@@ -1,11 +1,12 @@
 import { createClient } from '@supabase/supabase-js';
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
 import { Wallet } from 'ethers';
 import { WebSocket } from 'ws';
 import { z } from 'zod';
-import { backendEthersSigningWallet } from './config';
+import { backendEthersSigningWallet, SIGNATURE_WINDOW_MS } from './config';
 import { Database } from './types/database.types';
 import { WsMessageTypes } from './types/ws';
+import { verifySignedMessage } from './utils/auth';
 import {
   agentMessageInputSchema,
   gmMessageInputSchema,
@@ -29,6 +30,13 @@ const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3000';
 
 const randomDelay = () => Math.floor(Math.random() * (MAX_DELAY - MIN_DELAY + 1)) + MIN_DELAY;
 
+const keyMap: Record<string, number> = {
+  '0x9cf1FE84d1Bc056A171fd75Fe9C9789da35B1ffd': 12,
+  '0xAd6226d73C53a0F37A4F551fCc1c1F3B17dB24CA': 11,
+  '0xC333a28917644C2A75bB3A5B42D1dBB11f244E3c': 10,
+  '0xEcd63D57e0e03EeC21CC76B6F374F611260CC81D': 24,
+  '0x0C33268cBaFB2520CC01f11B2D41a5069ec20EcA': 25,
+};
 const sampleMessages = [
   'Hello everyone!',
   "How's it going?",
@@ -169,7 +177,31 @@ async function generateMessages() {
   function createConnection(userId: number): Connection {
     const ws = new WebSocket(WEBSOCKET_URL);
     // Create a random wallet for this connection
-    const wallet = Wallet.createRandom();
+
+    // 0x9cf1FE84d1Bc056A171fd75Fe9C9789da35B1ffd
+    // 0xAd6226d73C53a0F37A4F551fCc1c1F3B17dB24CA
+    // 0xC333a28917644C2A75bB3A5B42D1dBB11f244E3c
+    // 0xEcd63D57e0e03EeC21CC76B6F374F611260CC81D
+    // 0x0C33268cBaFB2520CC01f11B2D41a5069ec20EcA
+    const keyPool = [
+      '0x32cba915afa59d3f6081f64cfce0bed81c15f38300a4d805ecf80caa4309de88',
+      '0x4aa8fe4cc299ee31964deaf6a67eef596866969825a49104e92ed191aad4ab6b',
+      '0x2b202ea4d3b7a57276bdf9574c0eb46c2de17fa3fe6d64b13a18a79847523a96',
+      '0x5b82c3f345916d77814b169d26e515a9ac215ab11ec7aa2ee70459f0fa9d8611',
+      '0x342cfd6037271050d8783cc504077c4b1e11454da8211bfb29ac0a05c9508e9d',
+      // "0x59964d0d2e42d68210d2195a529280e55ac587027fae781adcfeaf6785aec4c2 and address: 0x4252C0fBaB671488b3c3fC2c76D40E1BD844D1e5
+      // "0xe31f34fe0eb308d05725219337ac69d1827f729e5ff36d161323a3cc9e42aeb3 and address: 0xf4cfbCAdB08c618bb98Fbf82090f20897473e15E
+      // "0xb966644b20cfabbb7dfb5aee78e75d587eac777d63eb61516c4f56995022fe33 and address: 0x217978E892E62E19216129694fa439C9FA3CcAB8
+      // "0xc37ec93ae0ac18806ad9d86d1b3e83324b790d67e90ec3139a56b20405472e45 and address: 0x5837B85d7966DEa3025f500b50dBc9BF89058005
+      // "0xb92bd0c7c141fc381efbf5381ec12f674302b3ab29382fec2a6998e073fd1b88 and address: 0x1D5EbEABEE35dbBA6Fd2847401F979b3f6249a93
+      // "0x922a64dac895e4ebedd2e942060f73e85b0bda1ef7cc852c5e194629f437320a and address: 0xe35dEc6912117c165f089F1fCD3f15601B96b3Dd
+      // "0x3569d1263cf81e7f06dec377a41ed2bd509fe882fc170215563e347d6db752ba and address: 0xc727C64CaeB98A915C4389931086156F60b6db25
+      // "0xffecbb174b4aceaa69cccbec90b87dce36ce19abb9a56fe2cc9c3becbec2b847 and address: 0x4E5dC9dF946500b07E9c66e4DD29bf9CD062002B
+      // "0x0b0041a57eac50c87be1b1e25a41f698add5b5b3142b4795d72bd1c4b1d1f2de and address: 0x67bFd0B42F5f39710B4E90301289F81Eab6315dA
+      // "0xa982f591f9334e05b20ee56bf442253f51e527ede300b2cad1731b38e3a017aa and address: 0x12BE474D127757d0a6a36631294F8FfBCdeF44F8
+    ];
+    const wallet = new Wallet(keyPool[Math.floor(Math.random() * keyPool.length)]);
+    console.log(`Created wallet with this private key: ${wallet.privateKey}`);
 
     const connection: Connection = {
       ws,
@@ -303,9 +335,11 @@ async function generateMessages() {
           const rand = Math.random();
           let message;
 
-          if (rand < BAD_MESSAGE_PROBABILITY) {
-            message = generateBadMessage();
-          } else if (rand < 0.35) {
+          // if (rand < BAD_MESSAGE_PROBABILITY) {
+          //   message = generateBadMessage();
+          // } else
+          if (rand < 0.35) {
+            console.log('Sending public chat message');
             // 35% for public chat
             // Public chat message
             const content = {
@@ -362,20 +396,31 @@ async function generateMessages() {
             // Agent message via POST
             try {
               const content = {
+                timestamp: Date.now(),
                 roomId: roomAndRound.roomId,
                 roundId: roomAndRound.roundId,
+                agentId: keyMap[activeConnection.wallet.address],
                 text: getRandomAgentMessage(),
-                timestamp: Date.now(),
-                agentId: 51,
               };
+              console.log('signingWallet', activeConnection.wallet.address);
               const signature = await activeConnection.wallet.signMessage(JSON.stringify(content));
 
+              console.log('signature', signature);
+              const { signer, error: signatureError } = verifySignedMessage(
+                content,
+                signature,
+                activeConnection.wallet.address,
+                content.timestamp,
+                SIGNATURE_WINDOW_MS
+              );
+              console.log('signature signers', signer, signatureError);
               const message: z.infer<typeof agentMessageInputSchema> = {
                 messageType: WsMessageTypes.AGENT_MESSAGE,
                 sender: activeConnection.wallet.address,
                 signature,
                 content,
-              };
+              } satisfies z.infer<typeof agentMessageInputSchema>;
+              console.log('message', message);
 
               const response = await axios.post(`${API_BASE_URL}/messages/agentMessage`, message);
 
@@ -384,7 +429,11 @@ async function generateMessages() {
                 response: response.data,
               });
             } catch (error) {
-              console.error('Error sending agent message via POST:', error);
+              if (error instanceof AxiosError) {
+                console.error('Error sending agent message via POST:', error.response?.data);
+              } else {
+                console.error('Error sending agent message via POST:', error);
+              }
             }
           }
 

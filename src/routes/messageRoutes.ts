@@ -84,8 +84,17 @@ export async function messagesRoutes(server: FastifyInstance) {
       },
     },
     async (request, reply) => {
-      console.log('processing agent message', request.body);
-      const result = await processAgentMessage(request.body);
+      const { data, error } = agentMessageInputSchema.safeParse(request.body);
+      
+      if (error) {
+        console.log('invalid agent message', error);
+        return reply.status(400).send({
+          message: 'Invalid agent message',
+          error: error.message,
+        });
+      }
+      const result = await processAgentMessage(data);
+      console.log('processAgentMessage result', result);
       return reply.status(result.statusCode).send({
         message: result.message,
         data: result.data,
