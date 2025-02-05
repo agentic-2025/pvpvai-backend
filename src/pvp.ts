@@ -10,62 +10,159 @@
 // 3. Return the altered AI Chat message and a boolean indicating if the content was altered (altered = true if any PvP modifiers modified the message, the only condition that does this for now is Poison)
 // }
 // The other two types of PvP actions are Amnesia and Direct Attack. These actions are taken against a single agent and do not modify the message or target, so they are
-import { RoundMessage } from './rooms';
-import { PvPResult } from './utils/pvpHandler';
 
+// Standard types PVP implementation SILENCE DEAFEN POISON
+import { supabase } from './config';
+import { PvpActions, PvpActionTypes, PoisonStatus } from './types/pvp';
+import { RoundMessageDB } from './types/roundTypes';
+
+// Core response type for PvP effect application
+export interface PvPResult {
+  message: RoundMessageDB | null;     // Original or modified message (null if blocked)
+  targets: number[];                  // Final list of target agents after effects
+  actions: {
+    type: PvpActions | PvpActionTypes;// Type of PvP action applied
+    source: number;                   // Agent who applied the effect
+    target: number;                   // Agent affected by the effect
+    effect: string;                   // Result of the effect (e.g., 'message_blocked')
+  }[];
+}
+
+// Structure of active PvP effects stored in database
+interface ActiveEffect {
+  type: PvpActions;                   // Effect type (SILENCE, DEAFEN, etc.)
+  source: number;                     // Agent who applied the effect
+  target: number;                     // Affected agent
+  duration: number;                   // How long effect lasts
+  details?: Record<string, any>;      // Additional effect parameters
+}
+
+// Message content structure with required text field
+interface MessageContent {
+  text: string;
+  [key: string]: any;                 // Allow additional properties
+}
+
+// Extend RoundMessageDB to ensure message content structure
+interface RoundMessageWithContent extends RoundMessageDB {
+  message: MessageContent;
+}
+
+/**
+ * Applies PvP effects to a message between agents
+ * 
+ * @param message - The message being sent
+ * @param senderAgentId - ID of agent sending message
+ * @param targetAgentIds - IDs of intended recipient agents
+ * @returns Modified message, targets, and applied effects
+ */
 export async function applyPvp(
-  message: RoundMessage,
+  message: RoundMessageWithContent,
   senderAgentId: number,
   targetAgentIds: number[]
 ): Promise<PvPResult> {
-  //TODO Commented out to get past import errors, can update this later
-  return { message: null, targets: [], actions: [] };
-  // // Example only; replace with actual logic and DB lookups
-  // let modifiedMessage = message;
-  // let modifiedTargets = [...targetAgentIds];
-  // let actions: PvPResult['actions'] = [];
+  const actions: PvPResult['actions'] = [];
+  // Deep clone to avoid modifying original message
+  let modifiedMessage: RoundMessageWithContent = JSON.parse(JSON.stringify(message));
+  let modifiedTargets = [...targetAgentIds];
 
-  // // Silence example
-  // const isSenderSilenced = false; // ...fetch from DB...
-  // if (isSenderSilenced) {
-  //   actions.push({
-  //     type: 'silence',
-  //     source: senderAgentId,
-  //     target: senderAgentId,
-  //     effect: 'message_blocked',
-  //   });
-  //   return { message: null, targets: [], actions };
-  // }
+  try {
+    // Fetch current PvP effects for the round
+    const { data: round, error: roundError } = await supabase
+      .from('rounds')
+      .select('pvp_status_effects')
+      .eq('id', message.round_id)
+      .single();
 
-  // // Deafen example
-  // modifiedTargets = modifiedTargets.filter((targetId) => {
-  //   const isDeafened = false; // ...fetch from DB...
-  //   if (isDeafened) {
-  //     actions.push({
-  //       type: 'deafen',
-  //       source: targetId,
-  //       target: targetId,
-  //       effect: 'message_blocked',
-  //     });
-  //   }
-  //   return !isDeafened;
-  // });
+    if (roundError) throw roundError;
 
-  // // Poison example
-  // const isSenderPoisoned = false; // ...fetch from DB...
-  // if (isSenderPoisoned && modifiedMessage?.text) {
-  //   modifiedMessage.text = modifiedMessage.text.replace('hello', 'h3ll0');
-  //   actions.push({
-  //     type: 'poison',
-  //     source: senderAgentId,
-  //     target: senderAgentId,
-  //     effect: 'message_altered',
-  //   });
-  // }
+    // Convert database JSON to typed array
+    const activeEffects: ActiveEffect[] = Array.isArray(round?.pvp_status_effects) 
+      ? (round.pvp_status_effects as unknown as ActiveEffect[]) 
+      : [];
 
-  // return {
-  //   message: modifiedMessage,
-  //   targets: modifiedTargets,
-  //   actions,
-  // };
+    // 1. SILENCE Check: Blocks all messages from silenced agents
+    const senderSilenced = activeEffects.find(
+      effect => effect.type === PvpActions.SILENCE && 
+                effect.target === senderAgentId
+    );
+
+    if (senderSilenced) {
+      actions.push({
+        type: PvpActions.SILENCE,
+        source: senderSilenced.source,
+        target: senderAgentId,
+        effect: 'message_blocked'
+      });
+      return { message: null, targets: [], actions };
+    }
+
+    // 2. DEAFEN Check: Remove deafened targets except for ATTACK messages
+    modifiedTargets = modifiedTargets.filter(targetId => {
+      const isDeafened = activeEffects.find(
+        effect => effect.type === PvpActions.DEAFEN && 
+                 effect.target === targetId
+      );
+      
+      if (isDeafened && message.message_type !== 'pvp_attack') {
+        actions.push({
+          type: PvpActions.DEAFEN,
+          source: isDeafened.source,
+          target: targetId,
+          effect: 'message_blocked'
+        });
+        return false;
+      }
+      return true;
+    });
+
+    // 3. POISON Check: Modify message content if sender is poisoned
+    const senderPoisoned = activeEffects.find(
+      effect => effect.type === PvpActions.POISON && 
+                effect.target === senderAgentId
+    ) as (ActiveEffect & { details: PoisonStatus['options'] }) | undefined;
+
+    if (senderPoisoned && message.message_type !== 'pvp_attack' && 
+        typeof modifiedMessage.message?.text === 'string') {
+      const poisonDetails = senderPoisoned.details;
+      
+      if (poisonDetails) {
+        const regex = new RegExp(
+          poisonDetails.find,
+          poisonDetails.case_sensitive ? 'g' : 'gi'
+        );
+        const newText = modifiedMessage.message.text.replace(regex, poisonDetails.replace);
+        
+        modifiedMessage = {
+          ...modifiedMessage,
+          message: {
+            ...modifiedMessage.message,
+            text: newText
+          }
+        };
+
+        actions.push({
+          type: PvpActions.POISON,
+          source: senderPoisoned.source,
+          target: senderAgentId,
+          effect: 'message_altered'
+        });
+      }
+    }
+
+    return {
+      message: modifiedMessage,
+      targets: modifiedTargets,
+      actions
+    };
+
+  } catch (error) {
+    console.error('Error applying PvP effects:', error);
+    // On error, allow message through unmodified
+    return {
+      message: modifiedMessage,
+      targets: targetAgentIds,
+      actions: []
+    };
+  }
 }

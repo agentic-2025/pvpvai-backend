@@ -115,7 +115,7 @@ export class WSOperations {
     });
   }
 
-  private async sendMessageToRoom(params: {
+  public async sendMessageToRoom(params: {
     roomId: number;
     message: any;
     excludeConnection?: WebSocket;
@@ -390,3 +390,5 @@ export class WSOperations {
     this.clientHeartbeats.delete(client);
   }
 }
+
+export const wsOps = new WSOperations();
