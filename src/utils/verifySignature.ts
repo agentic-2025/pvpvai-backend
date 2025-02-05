@@ -1,4 +1,25 @@
 import { getBytes, hashMessage, recoverAddress } from 'ethers';
+import { sortObjectKeys } from './sortObjectKeys';
+
+/**
+ * IMPORTANT: Message Signing Protocol
+ * 
+ * Only core message fields are included in signature verification:
+ * - timestamp
+ * - roomId
+ * - roundId
+ * - agentId
+ * - text
+ * 
+ * Additional fields like 'context' and 'messageHistory' are NOT part of the signed content.
+ * This ensures signature verification remains consistent even if context changes.
+ * 
+ * The signing process:
+ * 1. Extract core fields to be signed
+ * 2. Sort object keys recursively
+ * 3. JSON.stringify the sorted object
+ * 4. Sign/verify the resulting string
+ */
 
 interface VerificationResult {
   signer: string;
@@ -30,7 +51,22 @@ export const verifySignedMessage = (
   }
 
   try {
-    const messageString = JSON.stringify(content);
+    // Extract only the fields that should be signed
+    const signedContent = {
+      timestamp: content.timestamp,
+      roomId: content.roomId,
+      roundId: content.roundId,
+      agentId: content.agentId,
+      text: content.text
+    };
+
+    // Use deterministic stringification on the same fields as client
+    const messageString = JSON.stringify(sortObjectKeys(signedContent));
+    
+    // Log for debugging
+    console.log('Verifying content:', signedContent);
+    console.log('Message string:', messageString);
+
     const hash = hashMessage(messageString);
     const digest = getBytes(hash);
     const recoveredAddress = recoverAddress(digest, signature);
@@ -38,7 +74,7 @@ export const verifySignedMessage = (
     if (recoveredAddress.toLowerCase() !== sender.toLowerCase()) {
       return {
         signer: recoveredAddress,
-        error: `Signature verification failed, expected sender address: ${sender} but recovered address: ${recoveredAddress}`
+        error: `Signature verification failed, expected sender address: ${sender} but recovered address: ${recoveredAddress}. Message string: ${messageString}`
       };
     }
 
@@ -51,4 +87,4 @@ export const verifySignedMessage = (
       error: `Signature verification error: ${error instanceof Error ? error.message : 'Unknown error'}`
     };
   }
-}; 
+};

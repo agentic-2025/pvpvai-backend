@@ -1,3 +1,23 @@
+/**
+ * IMPORTANT: Message Signing Protocol
+ * 
+ * Only core message fields are included in signature verification:
+ * - timestamp
+ * - roomId
+ * - roundId
+ * - agentId
+ * - text
+ * 
+ * Additional fields like 'context' and 'messageHistory' are NOT part of the signed content.
+ * This ensures signature verification remains consistent even if context changes.
+ * 
+ * The signing process:
+ * 1. Extract core fields to be signed
+ * 2. Sort object keys recursively
+ * 3. JSON.stringify the sorted object
+ * 4. Sign/verify the resulting string
+ */
+
 import axios, { AxiosError } from 'axios';
 import { z } from 'zod';
 import { backendEthersSigningWallet, SIGNATURE_WINDOW_MS, supabase, wsOps } from '../config';
@@ -16,21 +36,168 @@ import {
   observationMessageInputSchema,
 } from './schemas';
 import { roundAndAgentsPreflight } from './validation';
+import { sortObjectKeys } from './sortObjectKeys';
 
-// // Messages from an agent participating in the room to another agent
-// export async function processAgentChatMessage(message: z.infer<typeof agentChatMessageInputSchema>){
-// Zod schema validation
-// Round preflight
-// Process message through PvP
-// Send processed message to all agents in the round
-// Broadcast to all players in the room
-// }
+// Add address validation helper
+function isValidEthereumAddress(address: string): boolean {
+  return /^0x[a-fA-F0-9]{40}$/.test(address);
+}
+
 type ProcessMessageResponse = {
   message?: string;
   data?: any;
   error?: string;
   statusCode: number;
 };
+
+// Messages from an agent participating in the room to another agent
+export async function processAgentMessage(
+  message: z.infer<typeof agentMessageInputSchema>
+): Promise<ProcessMessageResponse> {
+  try {
+    const { error: signatureError } = verifySignedMessage(
+      message.content,
+      message.signature,
+      message.sender,
+      message.content.timestamp,
+      SIGNATURE_WINDOW_MS
+    );
+    if (signatureError) {
+      return {
+        error: signatureError,
+        statusCode: 401,
+      };
+    }
+
+    const { roomId, roundId } = message.content;
+    const {
+      round,
+      agents,
+      roundAgents,
+      valid: roundValid,
+      reason: roundReason,
+    } = await roundAndAgentsPreflight(roundId);
+
+
+    const roomAgents = await roomService.getRoomAgents(roomId);
+
+    const senderAgent = roomAgents?.data?.find((a) => a.agent_id === message.content.agentId);
+    if (!senderAgent?.wallet_address) {
+      return {
+        error: `No wallet address found for agent ${message.content.agentId} in room_agents`,
+        statusCode: 400,
+      };
+    }
+
+    // Add validation for address format
+    if (!isValidEthereumAddress(message.sender) || !isValidEthereumAddress(senderAgent.wallet_address)) {
+      return {
+        error: `Invalid Ethereum address format. Sender: ${message.sender}, Agent wallet: ${senderAgent.wallet_address}`,
+        statusCode: 400,
+      };
+    }
+
+    // Add debug logging
+    console.log('Address comparison:', {
+      messageSender: message.sender,
+      agentWallet: senderAgent.wallet_address,
+      agentId: message.content.agentId
+    });
+
+    // Direct case-insensitive comparison
+    if (message.sender.toLowerCase() !== senderAgent.wallet_address.toLowerCase()) {
+      return {
+        error: `signer does not match agent address for agent ${message.content.agentId} in room_agents, expected "${senderAgent.wallet_address}" but got "${message.sender}"`,
+        statusCode: 400,
+      };
+    }
+
+    if (!roundValid) {
+      return {
+        error: `Round not valid: ${roundReason}`,
+        statusCode: 400,
+      };
+    }
+    if (!agents) {
+      return {
+        error: 'No agents found for round, nothing to post',
+        statusCode: 400,
+      };
+    }
+
+
+    const postPvpMessages: Record<number, any> = {};
+    const backendSignature = await signMessage(message.content);
+    // Send processed message to all agents in the round
+    for (const agent of agents) {
+      const postPvpMessage = message;
+      postPvpMessages[agent.id] = postPvpMessage;
+      await sendMessageToAgent({
+        agent,
+        message: {
+          ...message,
+          signature: backendSignature,
+          sender: backendEthersSigningWallet.address,
+        },
+      });
+    }
+
+    // Broadcast to all players in the room - Fix: Don't stringify an already parsed object
+    await wsOps.broadcastToAiChat({
+      roomId,
+      record: {
+        agent_id: message.content.agentId,
+        round_id: roundId,
+        original_author: message.content.agentId, //Not sure what I was thinking with this column.
+        pvp_status_effects: round.pvp_status_effects,
+        message_type: WsMessageTypes.AGENT_MESSAGE,
+        message: {
+          messageType: WsMessageTypes.AGENT_MESSAGE,
+          content: {
+            timestamp: message.content.timestamp,
+            roomId,
+            roundId,
+            senderId: message.content.agentId,
+            originalMessage: message,
+            originalTargets: agents
+              .filter((a) => a.id !== message.content.agentId)
+              .map((a) => a.id),
+            postPvpMessages,
+            pvpStatusEffects: typeof round.pvp_status_effects === 'string' 
+              ? JSON.parse(round.pvp_status_effects)
+              : round.pvp_status_effects || {},
+          },
+        }
+      },
+    });
+
+    return {
+      message: 'Agent message processed and stored',
+      data: message,
+      statusCode: 200,
+    };
+  } catch (err) {
+    // Enhanced error logging
+    console.error('Error details:', {
+      error: err,
+      message: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined
+    });
+
+    if (err instanceof Error) {
+      return {
+        error: `Error processing agent message: ${err.message}`,
+        statusCode: 500,
+      };
+    } else {
+      return {
+        error: `Unknown error processing agent message: ${String(err)}`,
+        statusCode: 500,
+      };
+    }
+  }
+}
+
 // Message from an oracle agent to all participants in the room
 export async function processObservationMessage(
   observation: z.infer<typeof observationMessageInputSchema>
@@ -109,143 +276,9 @@ export async function processObservationMessage(
   }
 }
 
-export async function processAgentMessage(
-  message: z.infer<typeof agentMessageInputSchema>
-): Promise<ProcessMessageResponse> {
-  try {
-    console.log('processing agent message', message);
-    const { signer, error: signatureError } = verifySignedMessage(
-      message.content,
-      message.signature,
-      message.sender,
-      message.content.timestamp,
-      SIGNATURE_WINDOW_MS
-    );
-    if (signatureError) {
-      return {
-        error: signatureError,
-        statusCode: 401,
-      };
-    }
-
-    console.log('processing agent message', message);
-    const { roomId, roundId } = message.content;
-    const {
-      round,
-      agents,
-      roundAgents,
-      valid: roundValid,
-      reason: roundReason,
-    } = await roundAndAgentsPreflight(roundId);
-
-    console.log('agents', agents);
-    console.log('signer', signer);
-    console.log('message.content.agentId', message.content.agentId);
-    const roomAgents = await roomService.getRoomAgents(roomId);
-    console.log('roomAgents', roomAgents);
-
-    const senderAgent = roomAgents?.data?.find((a) => a.agent_id === message.content.agentId);
-    if (signer !== senderAgent?.wallet_address) {
-      console.log(
-        'signer does not match agent address in room_agents, expected',
-        senderAgent?.wallet_address,
-        'but got',
-        signer
-      );
-      return {
-        error: `signer does not match agent address for agent ${message.content.agentId} in room_agents, expected "${senderAgent?.wallet_address}" but got "${signer}"`,
-        statusCode: 400,
-      };
-    }
-
-    if (!roundValid) {
-      return {
-        error: `Round not valid: ${roundReason}`,
-        statusCode: 400,
-      };
-    }
-    if (!agents) {
-      return {
-        error: 'No agents found for round, nothing to post',
-        statusCode: 400,
-      };
-    }
-
-    // Apply PvP rules to message
-    // TODO When PvP is fully implemented, apply PvP rules to the message
-
-    const postPvpMessages: Record<number, any> = {};
-    const backendSignature = await signMessage(message.content);
-    // Send processed message to all agents in the round
-    for (const agent of agents) {
-      // const pvpResult = await applyPvp(message, agent, round.pvp_status_effects);
-      const postPvpMessage = message;
-      postPvpMessages[agent.id] = postPvpMessage;
-      await sendMessageToAgent({
-        agent,
-        message: {
-          ...message,
-          signature: backendSignature,
-          sender: backendEthersSigningWallet.address,
-        },
-      });
-    }
-
-    // Broadcast to all players in the room
-    await wsOps.broadcastToAiChat({
-      roomId,
-      record: {
-        agent_id: message.content.agentId,
-        round_id: roundId,
-        original_author: message.content.agentId, //Not sure what I was thinking with this column.
-        pvp_status_effects: round.pvp_status_effects,
-        message_type: WsMessageTypes.AGENT_MESSAGE,
-        message: {
-          messageType: WsMessageTypes.AGENT_MESSAGE,
-          content: {
-            timestamp: message.content.timestamp,
-            roomId,
-            roundId,
-            senderId: message.content.agentId,
-            originalMessage: message,
-            originalTargets: agents
-              .filter((a) => a.id !== message.content.agentId)
-              .map((a) => a.id),
-            postPvpMessages: postPvpMessages,
-            pvpStatusEffects: JSON.parse((round.pvp_status_effects as string) || '{}'),
-          },
-        } satisfies z.infer<typeof agentMessageAiChatOutputSchema>,
-      },
-    });
-
-    return {
-      message: 'Agent message processed and stored',
-      data: message,
-      statusCode: 200,
-    };
-  } catch (err) {
-    if (err instanceof Error) {
-      console.error('Error processing agent message:', err.message);
-      return {
-        error: 'Error processing agent message: ' + err.message,
-        statusCode: 500,
-      };
-    } else if (err instanceof AxiosError) {
-      console.error('Error processing agent message:', err.response?.data);
-      return {
-        error: 'Error processing agent message: ' + err.response?.data,
-        statusCode: 500,
-      };
-    } else {
-      console.error('Error processing agent message:', err);
-      return {
-        error: 'Unknown error processing agent message: ' + err,
-        statusCode: 500,
-      };
-    }
-  }
-}
-
+// Message from a game master to specific agents in the room
+// Game masters can send messages to any agent that has ever been in the room
+// They can optionally ignore round membership requirements
 export async function processGmMessage(
   message: z.infer<typeof gmMessageInputSchema>
 ): Promise<ProcessMessageResponse> {

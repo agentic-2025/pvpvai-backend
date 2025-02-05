@@ -112,26 +112,17 @@ export async function messagesRoutes(server: FastifyInstance) {
     '/gmMessage',
     {
       schema: {
-        body: gmMessageInputSchema
+        body: {
+          type: 'object',
+          required: ['roomId', 'roundId', 'message'],
+        },
       },
     },
     async (request, reply) => {
-      try {
-        console.log('Processing GM message:', JSON.stringify(request.body, null, 2));
-        const result = await processGmMessage(request.body);
-        return reply.status(result.statusCode).send({
-          message: result.message,
-          data: result.data,
-          error: result.error?.toString(),
-        });
-      } catch (error) {
-        console.error('Error processing GM message:', error);
-        return reply.status(500).send({
-          message: 'Error processing GM message',
-          data: error,
-          error: error instanceof Error ? error.message : 'Unknown error processing GM message'
-        });
-      }
+      const result = await processGmMessage(request.body);
+      return reply.status(result.statusCode).send({
+        message: result.message,
+      });
     }
   );
 }

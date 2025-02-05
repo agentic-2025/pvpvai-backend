@@ -31,7 +31,7 @@ export async function roomRoutes(server: FastifyInstance) {
   // Add single agent to room
   server.post<{
     Params: { roomId: string };
-    Body: RoomAgentAdd;
+    Body: { agent_id: number; wallet_address: string };
   }>(
     '/:roomId/agents',
     {
@@ -48,7 +48,7 @@ export async function roomRoutes(server: FastifyInstance) {
     },
     async (request, reply) => {
       const roomId = parseInt(request.params.roomId);
-      const result = await roomController.addAgentToRoom(roomId, request.body.agent_id);
+      const result = await roomController.addAgentToRoom(roomId, request.body.agent_id, request.body.wallet_address);
       if (!result.success) {
         return reply.status(400).send({ error: result.error });
       }
@@ -59,7 +59,7 @@ export async function roomRoutes(server: FastifyInstance) {
   // Bulk add agents to room
   server.post<{
     Params: { roomId: string };
-    Body: RoomAgentBulkAdd;
+    Body: { agents: Array<{ id: number; walletAddress: string }> };
   }>(
     '/:roomId/agents/bulk',
     {
@@ -76,7 +76,7 @@ export async function roomRoutes(server: FastifyInstance) {
     },
     async (request, reply) => {
       const roomId = parseInt(request.params.roomId);
-      const result = await roomController.bulkAddAgentsToRoom(roomId, request.body.agent_ids);
+      const result = await roomController.bulkAddAgentsToRoom(roomId, request.body.agents);
       if (!result.success) {
         return reply.status(400).send({ error: result.error });
       }
