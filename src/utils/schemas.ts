@@ -200,6 +200,7 @@ export const participantsOutputMessageSchema = z.object({
     - All users in the room: gmMessageAiChatOutputSchema
   Purpose: Sent when the GM wants to send a message to all agents or all users in the room
 */
+// Add more specific validation for GM messages
 export const gmMessageInputSchema = z.object({
   messageType: z.literal(WsMessageTypes.GM_MESSAGE),
   signature: z.string(),
@@ -207,15 +208,35 @@ export const gmMessageInputSchema = z.object({
   content: z.object({
     gmId: z.number(),
     timestamp: z.number(),
-    targets: z.array(z.number()), // List of agent ids to send the message to
+    targets: z.array(z.number()),
     roomId: z.number(),
     roundId: z.number(),
     message: z.string(),
-    deadline: z.number().optional(), // Time in which the Agent must respond to the GM message before slashing/kicking
-    additionalData: z.record(z.string(), z.any()).optional(),
-    ignoreErrors: z.boolean().optional().default(false), // There are a few checks that a GM can ignore, like if the round is open or not, in case of emergency
-  }),
+    deadline: z.number().optional(),
+    additionalData: z.object({
+      messageHistory: z.array(z.object({
+        timestamp: z.number().optional(),
+        agentId: z.number().optional(),
+        text: z.string().optional(),
+        agentName: z.string(),
+        role: z.enum(['agent', 'gm'])
+      })).optional(),
+      currentRound: z.object({
+        id: z.number(),
+        agents: z.number()
+      }).optional(),
+      lastMessages: z.array(z.object({
+        text: z.string().optional(),
+        agentName: z.string()
+      })).optional(),
+      activePvPEffects: z.array(z.any()).optional()
+    }).optional(),
+    ignoreErrors: z.boolean().optional().default(false)
+  })
 });
+
+
+
 export const gmMessageAgentOutputSchema = gmMessageInputSchema; // GM messages are passthrough to agents
 export const gmMessageAiChatOutputSchema = gmMessageInputSchema; // GM messages are passthrough to AI Chat
 
@@ -471,3 +492,21 @@ export type RoomAgentBulkAdd = z.infer<typeof agentBulkAddSchema>;
 export type RoundMessage = z.infer<typeof roundMessageInputSchema>;
 export type RoundOutcome = z.infer<typeof roundOutcomeSchema>;
 export type KickParticipant = z.infer<typeof kickParticipantSchema>;
+
+// ----------------------------------------------
+// export const gmMessageInputSchema = z.object({
+//   messageType: z.literal('gm_message'),
+//   signature: z.string(),
+//   sender: z.string(),
+//   content: z.object({
+//     gmId: z.number(),
+//     timestamp: z.number(),
+//     targets: z.array(z.number()), // List of agent ids to send the message to
+//     roomId: z.number(),
+//     roundId: z.number(),
+//     message: z.string(),
+//     deadline: z.number().optional(), // Time in which the Agent must respond to the GM message before slashing/kicking
+//     additionalData: z.record(z.string(), z.any()).optional(),
+//     ignoreErrors: z.boolean().optional().default(false), // There are a few checks that a GM can ignore, like if the round is open or not, in case of emergency
+//   }),
+// });
