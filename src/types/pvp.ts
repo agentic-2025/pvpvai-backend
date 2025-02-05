@@ -96,3 +96,18 @@ export type PoisonStatus = {
 export type PvpStatusEffect = DeceiveStatus | BlindStatus | SilenceStatus | DeafenStatus | PoisonStatus;
 
 export type AllPvpActions = AttackAction | DeceiveStatus | BlindStatus | SilenceStatus | DeafenStatus | PoisonStatus;
+
+export interface PvPEffect {
+  effectId: string;
+  actionType: PvpActions;
+  sourceId: string;
+  targetId: number;
+  duration: number;
+  createdAt: number;
+  expiresAt: number;
+  details?: {
+    find: string;
+    replace: string;
+    case_sensitive?: boolean;
+  };
+}
