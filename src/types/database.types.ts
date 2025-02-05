@@ -20,7 +20,7 @@ export type Database = {
           endpoint: string
           eth_wallet_address: string | null
           id: number
-          image_url: string | null
+          image_url: string
           last_health_check: string | null
           platform: string
           single_sentence_summary: string | null
@@ -28,6 +28,7 @@ export type Database = {
           status: string | null
           type: string
           updated_at: string
+          uuid: string | null
         }
         Insert: {
           character_card?: string | null
@@ -39,7 +40,7 @@ export type Database = {
           endpoint: string
           eth_wallet_address?: string | null
           id?: number
-          image_url?: string | null
+          image_url: string
           last_health_check?: string | null
           platform: string
           single_sentence_summary?: string | null
@@ -47,6 +48,7 @@ export type Database = {
           status?: string | null
           type?: string
           updated_at?: string
+          uuid?: string | null
         }
         Update: {
           character_card?: string | null
@@ -58,7 +60,7 @@ export type Database = {
           endpoint?: string
           eth_wallet_address?: string | null
           id?: number
-          image_url?: string | null
+          image_url?: string
           last_health_check?: string | null
           platform?: string
           single_sentence_summary?: string | null
@@ -66,6 +68,7 @@ export type Database = {
           status?: string | null
           type?: string
           updated_at?: string
+          uuid?: string | null
         }
         Relationships: [
           {
@@ -430,11 +433,11 @@ export type Database = {
           game_master_action_log: Json | null
           game_master_id: number | null
           id: number
-          outcome: Json | null
           pvp_action_log: Json | null
           pvp_status_effects: Json | null
           room_id: number
           round_config: Json | null
+          status: Database["public"]["Enums"]["round_status"]
           updated_at: string
         }
         Insert: {
@@ -443,11 +446,11 @@ export type Database = {
           game_master_action_log?: Json | null
           game_master_id?: number | null
           id?: number
-          outcome?: Json | null
           pvp_action_log?: Json | null
           pvp_status_effects?: Json | null
           room_id: number
           round_config?: Json | null
+          status?: Database["public"]["Enums"]["round_status"]
           updated_at?: string
         }
         Update: {
@@ -456,11 +459,11 @@ export type Database = {
           game_master_action_log?: Json | null
           game_master_id?: number | null
           id?: number
-          outcome?: Json | null
           pvp_action_log?: Json | null
           pvp_status_effects?: Json | null
           room_id?: number
           round_config?: Json | null
+          status?: Database["public"]["Enums"]["round_status"]
           updated_at?: string
         }
         Relationships: [
@@ -505,10 +508,17 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_active_rooms_needing_rounds: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          id: number
+          active: boolean
+          room_config: Json
+        }[]
+      }
     }
     Enums: {
-      [_ in never]: never
+      round_status: "STARTING" | "CLOSING" | "OPEN" | "CLOSED" | "CANCELLED"
     }
     CompositeTypes: {
       [_ in never]: never
