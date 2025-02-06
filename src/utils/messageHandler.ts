@@ -37,6 +37,7 @@ import {
 } from './schemas';
 import { roundAndAgentsPreflight } from './validation';
 import { sortObjectKeys } from './sortObjectKeys';
+import { pvpService } from '../services/pvpService';
 
 // Add address validation helper
 function isValidEthereumAddress(address: string): boolean {
@@ -255,7 +256,10 @@ export async function processObservationMessage(
         round_id: roundId,
         pvp_status_effects: {},
         message_type: WsMessageTypes.OBSERVATION,
-        message: observation satisfies z.infer<typeof observationMessageAiChatOutputSchema>,
+        message: {
+          messageType: WsMessageTypes.OBSERVATION,
+          content: observation.content
+        }
       },
     });
 
@@ -280,17 +284,28 @@ export async function processGmMessage(
   message: z.infer<typeof gmMessageInputSchema>
 ): Promise<ProcessMessageResponse> {
   try {
+    // Add logging at the start of the function
+    console.log('Processing GM message:', message);
+
     //Verification train, choo choo
     const { sender } = message;
     const { gmId, roomId, roundId, ignoreErrors, targets, timestamp } = message.content;
 
+    // Add logging for key parameters
+    console.log('GM Message Details:', { sender, gmId, roomId, roundId, ignoreErrors, targets, timestamp });
+
     const { data: round, error: roundError } = await roundService.getRound(roundId);
     if ((roundError || !round) && !ignoreErrors) {
+      console.error('Error getting round:', roundError);
       return {
         error: 'Error getting round: ' + roundError,
         statusCode: 500,
       };
     }
+
+    // Add logging for round data
+    console.log('Round data:', round);
+
     if (round && !round.active && !ignoreErrors) {
       return {
         error: 'Round is not active',
@@ -399,6 +414,25 @@ export async function processGmMessage(
       };
     }
 
+    // Store message with proper typing
+    const result = await roundService.storeRoundMessage(
+      roundId,
+      gmId,
+      {
+        messageType: WsMessageTypes.GM_MESSAGE,
+        message: message,
+        original_author: gmId,
+        pvp_status_effects: round?.pvp_status_effects || {}
+      }
+    );
+
+    if (!result.success) {
+      return {
+        error: `Failed to store GM message: ${result.error}`,
+        statusCode: 500
+      };
+    }
+
     // Send processed message to all agents in the round
     for (const agent of agents) {
       await sendMessageToAgent({
@@ -407,15 +441,26 @@ export async function processGmMessage(
       });
     }
 
-    // Broadcast to all players in the room
+    // Add logging before broadcasting
+    console.log('Broadcasting GM message:', {
+      roomId,
+      record: {
+        agent_id: gmId,
+        round_id: roundId,
+        original_author: gmId,
+        message_type: WsMessageTypes.GM_MESSAGE,
+        pvp_status_effects: {},
+        message: message satisfies z.infer<typeof gmMessageAiChatOutputSchema>,
+      },
+    });
     await wsOps.broadcastToAiChat({
       roomId,
       record: {
         agent_id: gmId,
         round_id: roundId,
-        original_author: gmId, //Not sure what I was thinking with this column.
-        pvp_status_effects: {},
+        original_author: gmId,
         message_type: WsMessageTypes.GM_MESSAGE,
+        pvp_status_effects: {},
         message: message satisfies z.infer<typeof gmMessageAiChatOutputSchema>,
       },
     });

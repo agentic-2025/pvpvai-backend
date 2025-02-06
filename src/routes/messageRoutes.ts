@@ -81,7 +81,7 @@ export async function messagesRoutes(server: FastifyInstance) {
       });
     }
   );
-
+  
   // TODO This is a debug route, remove before prod unless it ends up being useful
   // Create a new GM message
   server.post<{
@@ -98,9 +98,27 @@ export async function messagesRoutes(server: FastifyInstance) {
       },
     },
     async (request, reply) => {
-      const result = await processGmMessage(request.body);
+      const { data, error } = gmMessageInputSchema.safeParse(request.body);
+      
+      if (error) {
+        console.log(`invalid GM message format:`, error);
+        return reply.status(400).send({
+          message: 'Invalid GM message format',
+          error: error.message,
+        });
+      }
+
+      const result = await processGmMessage(data);
+      
+      // Add proper error logging
+      if (result.error) {
+        console.error('Error processing GM message:', result.error);
+      }
+      
       return reply.status(result.statusCode).send({
         message: result.message,
+        data: result.data,
+        error: result.error
       });
     }
   );

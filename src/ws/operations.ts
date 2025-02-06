@@ -1,7 +1,7 @@
 import { WebSocket } from 'ws';
 import { z } from 'zod';
 import { SIGNATURE_WINDOW_MS, supabase } from '../config';
-import { Database } from '../types/database.types';
+import { Database, Json } from '../types/database.types';
 import { WsMessageTypes } from '../types/ws';
 import { verifySignedMessage } from '../utils/auth';
 import { processGmMessage } from '../utils/messageHandler';
@@ -35,6 +35,10 @@ interface MessageType {
   };
 }
 
+interface DbMessage extends MessageType {
+  [key: string]: Json | undefined;
+}
+
 // Type guard to verify message structure
 function isMessageType(message: unknown): message is MessageType {
   if (!message || typeof message !== 'object') return false;
@@ -48,6 +52,17 @@ function isMessageType(message: unknown): message is MessageType {
     'roundId' in msg.content &&
     'roomId' in msg.content
   );
+}
+
+interface MessageRecord {
+  agent_id: number;
+  round_id: number;
+  message: MessageType;
+  message_type: WsMessageTypes; // Make this required, not optional
+  original_author?: number;
+  pvp_status_effects?: Json;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export class WSOperations {
@@ -111,44 +126,64 @@ export class WSOperations {
   // Inserts message into round_agent_messages and broadcasts to all agents in the room
   async broadcastToAiChat(params: {
     roomId: number;
-    record: Database['public']['Tables']['round_agent_messages']['Insert'];
+    record: MessageRecord;
     excludeConnection?: WebSocket;
   }): Promise<void> {
     try {
       const { roomId, record } = params;
 
-      // Validate message format
+      // Validate record has required fields
       if (!record.message || !record.agent_id || !record.round_id) {
         throw new Error('Invalid message format');
       }
 
-      // Validate and type-cast message
-      if (!isMessageType(record.message)) {
-        throw new Error('Invalid message structure');
+      // Ensure message_type is never null
+      const messageType = record.message_type;
+      if (!messageType) {
+        throw new Error('Message type is required');
       }
 
-      const message = record.message;
+      // Create database record with explicit type
+      const messageData = {
+        agent_id: record.agent_id,
+        round_id: record.round_id,
+        message: record.message as unknown as Json,
+        message_type: messageType,
+        original_author: record.original_author,
+        pvp_status_effects: record.pvp_status_effects,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
 
-      // Store in database with retries
-      await this.retryOperation(async () => {
-        const { error } = await supabase
-          .from('round_agent_messages')
-          .insert({
-            ...record,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          });
-        
-        if (error) throw error;
+      // Log for debugging
+      console.log('Broadcasting message:', {
+        type: messageType,
+        record,
+        messageData
       });
 
-      // Broadcast with proper format
+      // Insert into database
+      const { error } = await supabase
+        .from('round_agent_messages')
+        .insert(messageData);
+      
+      if (error) throw error;
+
+      // Broadcast with proper format based on message type
       await this.sendMessageToRoom({
         roomId,
-        message: {
-          messageType: message.messageType,
+        message: messageType === WsMessageTypes.GM_MESSAGE ? {
+          messageType: WsMessageTypes.GM_MESSAGE,
           content: {
-            ...message.content,
+            ...record.message.content,
+            timestamp: Date.now(),
+            roundId: record.round_id,
+            roomId
+          }
+        } : {
+          messageType: messageType,
+          content: {
+            ...record.message.content,
             timestamp: Date.now(),
             roundId: record.round_id,
             roomId
@@ -440,12 +475,17 @@ export class WSOperations {
     client: WebSocket,
     message: z.infer<typeof gmMessageInputSchema>
   ): Promise<void> {
-    //Process GM message takes care of validation + broadcast including a variant of signature verification
-    const { error } = await processGmMessage(message);
-    if (error) {
-      console.error('Error processing GM message:', error);
-      await this.sendSystemMessage(client, error, true, message);
+    // Add logging at the start of the function
+    console.log('Handling GM message in WebSocket:', message);
+
+    const result = await processGmMessage(message);
+    if (result.error) {
+      console.error('Error processing GM message:', result.error);
+      await this.sendSystemMessage(client, result.error, true, message);
+      return;
     }
+    
+    // Send success confirmation
     await this.sendSystemMessage(client, 'GM Message processed and stored', false, message);
   }
 

@@ -43,27 +43,3 @@ export enum WsMessageTypes {
   // Purpose: Informs users that a PvP status has been removed from an agent
   PVP_STATUS_REMOVED = 'pvp_status_removed',
 }
-
-export interface AuthenticatedMessage {
-  signature: string; //Signature of the content and timestamp. Optional for right now until we implement signature auth across the board.
-  sender: string; //Address of the sender, must match signature. Optional for right now until we implement signature auth across the board.
-}
-
-export interface ObservationWalletBalanceData {
-  walletBalances: {
-    [walletAddress: string]: {
-      nativeBalance: BigInt;
-      tokenBalances: { [tokenAddress: string]: BigInt };
-    };
-  };
-}
-
-export interface ObservationPriceData {
-  nativePrice: number;
-  tokenPrices: {
-    [tokenAddress: string]: {
-      source: string;
-      tokenPriceUsd: number;
-    };
-  };
-}

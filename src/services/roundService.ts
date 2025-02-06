@@ -1,8 +1,18 @@
 import { PostgrestError } from '@supabase/supabase-js';
 import { supabase } from '../config';
-import { Database, Tables } from '../types/database.types';
+import { Database, Tables, Json } from '../types/database.types';
 import { RoomOperationResult } from '../types/roomTypes';
 import { RoundDataDB as RoundData, RoundMessageDB as RoundMessage } from '../types/roundTypes';
+import { WsMessageTypes } from '../types/ws';
+
+interface MessageWithType {
+  messageType: WsMessageTypes;
+  message: {
+    [key: string]: Json | undefined;
+  };
+  original_author?: number;
+  pvp_status_effects?: Json;
+}
 
 export class RoundService {
   async getOrCreateActiveRound(roomId: number): Promise<RoomOperationResult<RoundData>> {
@@ -39,13 +49,16 @@ export class RoundService {
   async storeRoundMessage(
     roundId: number,
     agentId: number,
-    message: any
+    message: MessageWithType
   ): Promise<RoomOperationResult<RoundMessage>> {
     try {
       const messageData: Database['public']['Tables']['round_agent_messages']['Insert'] = {
         round_id: roundId,
         agent_id: agentId,
-        message: message,
+        message: message.message,
+        message_type: message.messageType,
+        original_author: message.original_author || agentId,
+        pvp_status_effects: message.pvp_status_effects || {}
       };
       console.log('messageData on storeRoundMessage', messageData);
 
