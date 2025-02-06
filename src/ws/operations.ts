@@ -137,61 +137,56 @@ export class WSOperations {
         throw new Error('Invalid message format');
       }
 
-      // Ensure message_type is never null
-      const messageType = record.message_type;
+      // Extract message type correctly
+      const messageType = record.message_type || record.message.messageType;
       if (!messageType) {
         throw new Error('Message type is required');
       }
 
-      // Create database record with explicit type
+      // Create database record
       const messageData = {
         agent_id: record.agent_id,
         round_id: record.round_id,
-        message: record.message as unknown as Json,
-        message_type: messageType,
+        message: record.message as unknown as Json, // cast to Json
+        message_type: messageType, // Ensure this is set explicitly
         original_author: record.original_author,
-        pvp_status_effects: record.pvp_status_effects,
+        pvp_status_effects: record.pvp_status_effects || {},
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       };
 
-      // Log for debugging
+      // Debug logging
       console.log('Broadcasting message:', {
         type: messageType,
-        record,
-        messageData
+        data: messageData
       });
 
-      // Insert into database
+      // Store in database
       const { error } = await supabase
         .from('round_agent_messages')
         .insert(messageData);
       
       if (error) throw error;
 
-      // Broadcast with proper format based on message type
+      // Format message based on type
+      const wsMessage: any = {
+        messageType,
+        content: {
+          ...record.message.content,
+          timestamp: Date.now(),
+          roundId: record.round_id,
+          roomId
+        }
+      };
+      if (record.pvp_status_effects) {
+        wsMessage.content.pvp_status_effects = record.pvp_status_effects;
+      }
+
       await this.sendMessageToRoom({
         roomId,
-        message: messageType === WsMessageTypes.GM_MESSAGE ? {
-          messageType: WsMessageTypes.GM_MESSAGE,
-          content: {
-            ...record.message.content,
-            timestamp: Date.now(),
-            roundId: record.round_id,
-            roomId
-          }
-        } : {
-          messageType: messageType,
-          content: {
-            ...record.message.content,
-            timestamp: Date.now(),
-            roundId: record.round_id,
-            roomId
-          }
-        },
+        message: wsMessage,
         excludeConnection: params.excludeConnection
       });
-
     } catch (error) {
       console.error('Error in broadcastToAiChat:', error);
       throw error;

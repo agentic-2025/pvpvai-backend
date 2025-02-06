@@ -23,7 +23,7 @@ import { z } from 'zod';
 import { backendEthersSigningWallet, SIGNATURE_WINDOW_MS, supabase, wsOps } from '../config';
 import { roomService } from '../services/roomService';
 import { roundService } from '../services/roundService';
-import { Tables } from '../types/database.types';
+import { Json, Tables } from '../types/database.types';
 import { WsMessageTypes } from '../types/ws';
 import { signMessage, verifySignedMessage } from './auth';
 import {
@@ -50,6 +50,15 @@ type ProcessMessageResponse = {
   error?: string;
   statusCode: number;
 };
+
+interface MessageWithType {
+  messageType: WsMessageTypes;
+  message: {
+    [key: string]: Json | undefined;
+  };
+  original_author?: number;
+  pvp_status_effects?: Json;
+}
 
 // Messages from an agent participating in the room to another agent
 export async function processAgentMessage(
@@ -284,175 +293,54 @@ export async function processGmMessage(
   message: z.infer<typeof gmMessageInputSchema>
 ): Promise<ProcessMessageResponse> {
   try {
-    // Add logging at the start of the function
-    console.log('Processing GM message:', message);
-
-    //Verification train, choo choo
-    const { sender } = message;
-    const { gmId, roomId, roundId, ignoreErrors, targets, timestamp } = message.content;
-
-    // Add logging for key parameters
-    console.log('GM Message Details:', { sender, gmId, roomId, roundId, ignoreErrors, targets, timestamp });
-
-    const { data: round, error: roundError } = await roundService.getRound(roundId);
-    if ((roundError || !round) && !ignoreErrors) {
-      console.error('Error getting round:', roundError);
-      return {
-        error: 'Error getting round: ' + roundError,
-        statusCode: 500,
-      };
-    }
-
-    // Add logging for round data
-    console.log('Round data:', round);
-
-    if (round && !round.active && !ignoreErrors) {
-      return {
-        error: 'Round is not active',
-        statusCode: 400,
-      };
-    }
-
-    // (Ignorable) Check round open and get round
-    const { data: roundAgents, error: roundAgentsError } =
-      await roundService.getRoundAgents(roundId);
-    if ((roundAgentsError || !roundAgents) && !ignoreErrors) {
-      return {
-        error: 'Error getting round agents: ' + roundAgentsError,
-        statusCode: 500,
-      };
-    }
-
-    // Get agents for their endpoints
-    const { data: agents, error: agentsError } = await supabase
-      .from('agents')
-      .select('*')
-      .in(
-        'id',
-        targets.map((t) => t)
-      );
-    if (agentsError) {
-      return {
-        error: 'Error getting agents: ' + agentsError,
-        statusCode: 500,
-      };
-    }
-
-    // Confirm sender has game master role
-    const { data: gameMaster, error: gameMasterError } = await supabase
-      .from('agents')
-      .select('*')
-      .eq('id', gmId)
-      .eq('type', 'game-master')
-      .single();
-    if (gameMasterError) {
-      if (gameMasterError.code === 'PGRST106') {
-        return {
-          error: 'Game master not found',
-          statusCode: 400,
-        };
-      }
-      return {
-        error: 'Error getting Game Master: ' + gameMasterError,
-        statusCode: 500,
-      };
-    }
-
-    // Verify signature
-    const { signer, error: signatureError } = verifySignedMessage(
+    // Verify signature and validate message
+    const { error: signatureError } = verifySignedMessage(
       message.content,
       message.signature,
-      sender,
+      message.sender,
       message.content.timestamp,
       SIGNATURE_WINDOW_MS
     );
     if (signatureError) {
-      return {
-        error: signatureError,
-        statusCode: 401,
-      };
-    }
-    if (signer !== backendEthersSigningWallet.address && signer !== gameMaster.sol_wallet_address) {
-      return {
-        error: "Signer does not match the game master's signing wallet",
-        statusCode: 401,
-      };
+      return { error: signatureError, statusCode: 401 };
     }
 
-    // Check if any of the targets of the message are not in the room history.
-    // GM cannot message targets that have never been in the room
-    const allAgentsInRoom = await roomService.getRoomAgents(roomId);
-    if (allAgentsInRoom.error) {
-      return {
-        error:
-          'Could not check which agents have ever been associated with this room: ' +
-          allAgentsInRoom.error,
-        statusCode: 500,
-      };
-    }
+    const { gmId, roomId, roundId } = message.content;
 
-    const agentsNotInRoom = targets.filter(
-      (target) => !allAgentsInRoom.data?.some((agent) => agent.id === target)
-    );
-    if (agentsNotInRoom.length > 0) {
-      return {
-        error: `Some targets have never been in this room, cannot send message. Targets not found in room: ${agentsNotInRoom.join(', ')}`,
-        statusCode: 400,
-      };
-    }
+    // Add debug logging
+    console.log('Received GM message:', {
+      gmId,
+      roomId,
+      roundId
+    });
 
-    // (Ignorable) Check if any of the targets of the message are not in the round
-    // GM can bypass round membership errors if they have to send a message to clean up something,
-    // TODO preflight cleans kicked, but because this is ignorable, you can bypass, not critical to fix.
-    const agentsNotInRound = targets.filter(
-      (target) => !roundAgents?.some((agent) => agent.id === target)
-    );
-    if (agentsNotInRound.length > 0 && !ignoreErrors) {
-      return {
-        error: `Some targets are not in the round, cannot send message. Targets not found in round: ${agentsNotInRound.join(', ')}`,
-        statusCode: 400,
-      };
+    // Get current round state with PvP effects
+    const { round, valid } = await roundAndAgentsPreflight(roundId);
+    if (!valid) {
+      return { error: 'Invalid round state', statusCode: 400 };
     }
 
     // Store message with proper typing
-    const result = await roundService.storeRoundMessage(
-      roundId,
-      gmId,
-      {
-        messageType: WsMessageTypes.GM_MESSAGE,
-        message: message,
-        original_author: gmId,
-        pvp_status_effects: round?.pvp_status_effects || {}
-      }
-    );
+    const messageData: MessageWithType = {
+      messageType: WsMessageTypes.GM_MESSAGE, // concisely define messageType
+      message: message as unknown as { [key: string]: any },
+      original_author: gmId,
+      pvp_status_effects: round.pvp_status_effects || {}
+    };
 
+    const result = await roundService.storeRoundMessage(roundId, gmId, messageData);
     if (!result.success) {
-      return {
-        error: `Failed to store GM message: ${result.error}`,
-        statusCode: 500
+      console.error('Failed to store GM message:', result.error);
+      return { 
+        error: `Failed to store GM message: ${result.error}`, 
+        statusCode: 500 
       };
     }
 
-    // Send processed message to all agents in the round
-    for (const agent of agents) {
-      await sendMessageToAgent({
-        agent,
-        message,
-      });
-    }
+    // Add success logging
+    console.log('GM message stored successfully for gmId:', gmId);
 
-    // Add logging before broadcasting
-    console.log('Broadcasting GM message:', {
-      roomId,
-      record: {
-        agent_id: gmId,
-        round_id: roundId,
-        original_author: gmId,
-        message_type: WsMessageTypes.GM_MESSAGE,
-        pvp_status_effects: {},
-        message: message satisfies z.infer<typeof gmMessageAiChatOutputSchema>,
-      },
-    });
+    // Broadcast the message through WebSocket
     await wsOps.broadcastToAiChat({
       roomId,
       record: {
@@ -460,21 +348,21 @@ export async function processGmMessage(
         round_id: roundId,
         original_author: gmId,
         message_type: WsMessageTypes.GM_MESSAGE,
-        pvp_status_effects: {},
-        message: message satisfies z.infer<typeof gmMessageAiChatOutputSchema>,
-      },
+        pvp_status_effects: round.pvp_status_effects || {},
+        message: message
+      }
     });
 
     return {
       message: 'GM Message processed and stored',
       data: message,
-      statusCode: 200,
+      statusCode: 200
     };
   } catch (err) {
     console.error('Error processing GM message:', err);
     return {
-      error: err instanceof Error ? err.message : 'Unknown error processing GM message: ' + err,
-      statusCode: 500,
+      error: err instanceof Error ? err.message : 'Unknown error processing GM message',
+      statusCode: 500
     };
   }
 }

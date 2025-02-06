@@ -60,7 +60,7 @@ export class RoundService {
         original_author: message.original_author || agentId,
         pvp_status_effects: message.pvp_status_effects || {}
       };
-      console.log('messageData on storeRoundMessage', messageData);
+      console.log('Storing round message with:', messageData);
 
       const { data: storedMessage, error } = await supabase
         .from('round_agent_messages')
@@ -71,9 +71,11 @@ export class RoundService {
         .single();
 
       if (error) {
+        console.error('DB insert error for round message:', error);
         return { success: false, error: error.message };
       }
 
+      console.log('Round message stored successfully:', storedMessage);
       return { success: true, data: storedMessage };
     } catch (err) {
       console.error('Error storing round message:', err);
