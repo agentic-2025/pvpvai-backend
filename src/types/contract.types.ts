@@ -2051,6 +2051,25 @@ export const pvPFacetAbi = [
   },
   {
     type: 'function',
+    inputs: [{ name: 'agent', internalType: 'address', type: 'address' }],
+    name: 'getPvpStatusesForCurrentRound',
+    outputs: [
+      {
+        name: '',
+        internalType: 'struct IPvP.PvpStatus[]',
+        type: 'tuple[]',
+        components: [
+          { name: 'verb', internalType: 'string', type: 'string' },
+          { name: 'instigator', internalType: 'address', type: 'address' },
+          { name: 'endTime', internalType: 'uint40', type: 'uint40' },
+          { name: 'parameters', internalType: 'bytes', type: 'bytes' },
+        ],
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     inputs: [{ name: 'roundId', internalType: 'uint256', type: 'uint256' }],
     name: 'getRoundState',
     outputs: [
