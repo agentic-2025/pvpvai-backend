@@ -1,5 +1,7 @@
 import { RoomService } from '../services/roomService';
 import { DBRoomAgent, RoomOperationResult, RoomSetupData } from '../types/roomTypes';
+import { supabase } from '../config';
+
 
 // Initialize service instance
 const roomService = new RoomService();
@@ -85,6 +87,55 @@ export class RoomController {
     }
 
     return await roomService.bulkAddAgentsToRoom(roomId, agents);
+  }
+
+  async findActiveRoom(
+    name: string,
+    chainId: string,
+    chainFamily: string
+  ): Promise<RoomOperationResult> {
+    try {
+      const { data, error } = await supabase
+        .from('rooms')
+        .select('*')
+        .eq('name', name)
+        .eq('chain_id', parseInt(chainId))
+        .eq('chain_family', chainFamily)
+        .eq('active', true)
+        .single();
+  
+      if (error) {
+        return { success: false, error: error.message };
+      }
+  
+      return { 
+        success: true, 
+        data: { roomId: data.id } 
+      };
+    } catch (err) {
+      console.error('Error finding active room:', err);
+      return { success: false, error: 'Failed to find active room' };
+    }
+  }
+  
+  async getActiveRound(roomId: number): Promise<RoomOperationResult> {
+    try {
+      const { data, error } = await supabase
+        .from('rounds')
+        .select('*')
+        .eq('room_id', roomId)
+        .eq('active', true)
+        .single();
+  
+      if (error) {
+        return { success: false, error: error.message };
+      }
+  
+      return { success: true, data };
+    } catch (err) {
+      console.error('Error getting active round:', err);
+      return { success: false, error: 'Failed to get active round' };
+    }
   }
 }
 

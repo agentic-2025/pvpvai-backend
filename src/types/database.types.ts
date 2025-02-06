@@ -20,7 +20,7 @@ export type Database = {
           endpoint: string
           eth_wallet_address: string | null
           id: number
-          image_url: string | null
+          image_url: string
           last_health_check: string | null
           platform: string
           single_sentence_summary: string | null
@@ -28,6 +28,7 @@ export type Database = {
           status: string | null
           type: string
           updated_at: string
+          uuid: string | null
         }
         Insert: {
           character_card?: string | null
@@ -39,7 +40,7 @@ export type Database = {
           endpoint: string
           eth_wallet_address?: string | null
           id?: number
-          image_url?: string | null
+          image_url: string
           last_health_check?: string | null
           platform: string
           single_sentence_summary?: string | null
@@ -47,6 +48,7 @@ export type Database = {
           status?: string | null
           type?: string
           updated_at?: string
+          uuid?: string | null
         }
         Update: {
           character_card?: string | null
@@ -58,7 +60,7 @@ export type Database = {
           endpoint?: string
           eth_wallet_address?: string | null
           id?: number
-          image_url?: string | null
+          image_url?: string
           last_health_check?: string | null
           platform?: string
           single_sentence_summary?: string | null
@@ -66,6 +68,7 @@ export type Database = {
           status?: string | null
           type?: string
           updated_at?: string
+          uuid?: string | null
         }
         Relationships: [
           {
@@ -430,7 +433,6 @@ export type Database = {
           game_master_action_log: Json | null
           game_master_id: number | null
           id: number
-          outcome: Json | null
           pvp_action_log: Json | null
           pvp_status_effects: Json | null
           room_id: number
@@ -443,7 +445,6 @@ export type Database = {
           game_master_action_log?: Json | null
           game_master_id?: number | null
           id?: number
-          outcome?: Json | null
           pvp_action_log?: Json | null
           pvp_status_effects?: Json | null
           room_id: number
@@ -456,7 +457,6 @@ export type Database = {
           game_master_action_log?: Json | null
           game_master_id?: number | null
           id?: number
-          outcome?: Json | null
           pvp_action_log?: Json | null
           pvp_status_effects?: Json | null
           room_id?: number

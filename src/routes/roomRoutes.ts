@@ -126,4 +126,62 @@ export async function roomRoutes(server: FastifyInstance) {
       }
     }
   );
+  // Get active room with matching parameters
+server.get<{
+  Querystring: { 
+    name: string;
+    chain_id: string;
+    chain_family: string;
+  }
+}>(
+  '/active',
+  {
+    schema: {
+      querystring: {
+        type: 'object',
+        required: ['name', 'chain_id', 'chain_family'],
+        properties: {
+          name: { type: 'string' },
+          chain_id: { type: 'string' },
+          chain_family: { type: 'string' }
+        }
+      }
+    }
+  },
+  async (request, reply) => {
+    const result = await roomController.findActiveRoom(
+      request.query.name,
+      request.query.chain_id,
+      request.query.chain_family
+    );
+    if (!result.success) {
+      return reply.status(400).send({ error: result.error });
+    }
+    return reply.send(result.data);
+  }
+);
+
+// Get active round for room
+server.get<{ Params: { roomId: string } }>(
+  '/rounds/active/:roomId',
+  {
+    schema: {
+      params: {
+        type: 'object',
+        required: ['roomId'],
+        properties: {
+          roomId: { type: 'string', pattern: '^[0-9]+$' }
+        }
+      }
+    }
+  },
+  async (request, reply) => {
+    const roomId = parseInt(request.params.roomId);
+    const result = await roomController.getActiveRound(roomId);
+    if (!result.success) {
+      return reply.status(400).send({ error: result.error });
+    }
+    return reply.send(result.data);
+  }
+);
 }

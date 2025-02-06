@@ -435,6 +435,33 @@ export const agentBulkAddSchema = z.object({
 //   }),
 // });
 
+export const roundAgentMessageSchema = z.object({
+  agent_id: z.number(),
+  round_id: z.number(),
+  message: z.record(z.unknown()),
+  message_type: z.string().nullable(),
+  original_author: z.number().nullable(),
+  pvp_status_effects: z.record(z.unknown()).nullable(),
+  created_at: z.string().optional(),
+  updated_at: z.string().optional()
+});
+
+export const pvpEffectSchema = z.object({
+  effectId: z.string(),
+  actionType: z.enum(['SILENCE', 'DEAFEN', 'ATTACK', 'POISON']),
+  sourceId: z.string(),
+  targetId: z.number(),
+  duration: z.number(),
+  createdAt: z.number(),
+  expiresAt: z.number(),
+  details: z.object({
+    find: z.string().optional(),
+    replace: z.string().optional(),
+    case_sensitive: z.boolean().optional()
+  }).optional()
+});
+
+
 // Add this schema for authenticated messages
 export const authenticatedMessageSchema = z.object({
   timestamp: z.number(),

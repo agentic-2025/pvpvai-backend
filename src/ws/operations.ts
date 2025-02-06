@@ -83,19 +83,38 @@ export class WSOperations {
     record: Database['public']['Tables']['round_agent_messages']['Insert'];
     excludeConnection?: WebSocket;
   }): Promise<void> {
-    const { roomId, record, excludeConnection } = params;
+    const { roomId, record } = params;
 
-    // First insert the message into the database
-    const { error } = await supabase.from('round_agent_messages').insert(record);
-    if (error) {
-      console.error('Failed to insert message into round_agent_messages:', error);
-      //Oh well, we tried (for now)
+    try {
+      // Validate record has required fields
+      if (!record.agent_id || !record.round_id || !record.message) {
+        throw new Error('Invalid record structure: missing required fields');
+      }
+
+      // Insert with timestamps
+      const { error } = await supabase
+        .from('round_agent_messages')
+        .insert({
+          ...record,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        });
+
+      if (error) {
+        console.error('Failed to insert message:', error);
+        throw error;
+      }
+
+      // Only broadcast after successful DB insert
+      await this.sendMessageToRoom({
+        roomId,
+        message: record.message, // message should already be an object, not stringified
+        excludeConnection: params.excludeConnection // Fixed: Reference params.excludeConnection instead of shorthand
+      });
+    } catch (error) {
+      console.error('Error in broadcastToAiChat:', error);
+      throw error; // Propagate errors up
     }
-    await this.sendMessageToRoom({
-      roomId,
-      message: record.message,
-      excludeConnection,
-    });
   }
 
   async broadcastParticipantsToRoom(params: { roomId: number; count: number }): Promise<void> {
