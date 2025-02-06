@@ -516,6 +516,14 @@ export type Database = {
           room_config: Json
         }[]
       }
+      get_active_rounds_to_close: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          id: number
+          active: boolean
+          room_config: Json
+        }[]
+      }
     }
     Enums: {
       round_status: "STARTING" | "CLOSING" | "OPEN" | "CLOSED" | "CANCELLED"
