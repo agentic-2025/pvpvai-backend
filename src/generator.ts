@@ -10,6 +10,8 @@ import { verifySignedMessage } from './utils/auth';
 import {
   agentMessageInputSchema,
   gmMessageInputSchema,
+  observationMessageInputSchema,
+  ObservationType,
   participantsInputMessageSchema,
   publicChatMessageInputSchema,
 } from './utils/schemas';
@@ -92,6 +94,47 @@ const getRandomGMMessage = () =>
 const getRandomAgentMessage = () =>
   sampleAgentMessages[Math.floor(Math.random() * sampleAgentMessages.length)];
 
+// Add sample observation data
+const sampleObservations = {
+  [ObservationType.WALLET_BALANCES]: [
+    {
+      address: '0x742d35Cc6634C0532925a3b844Bc454e4438f44e',
+      balances: {
+        ETH: '1.5',
+        USDC: '1000.00',
+        WETH: '0.5',
+      },
+    },
+  ],
+  [ObservationType.PRICE_DATA]: [
+    {
+      pair: 'ETH/USD',
+      price: '2150.75',
+      timestamp: Date.now(),
+    },
+    {
+      pair: 'BTC/USD',
+      price: '35750.25',
+      timestamp: Date.now(),
+    },
+  ],
+  [ObservationType.GAME_EVENT]: [
+    {
+      type: 'round_start',
+      details: 'New trading round beginning',
+    },
+    {
+      type: 'market_update',
+      details: 'Significant price movement detected',
+    },
+  ],
+};
+
+const getRandomObservation = (type: ObservationType) => {
+  const observations = sampleObservations[type];
+  return observations[Math.floor(Math.random() * observations.length)];
+};
+
 async function getTestUsers() {
   const { data: users, error } = await supabase.from('users').select('id').limit(NUM_TEST_USERS);
 
@@ -121,6 +164,7 @@ async function getActiveRoomAndRound() {
     `
     )
     .eq('active', true)
+    .eq('room_id', 5)
     .limit(1)
     .single();
 
@@ -178,27 +222,19 @@ async function generateMessages() {
     const ws = new WebSocket(WEBSOCKET_URL);
     // Create a random wallet for this connection
 
-    // 0x9cf1FE84d1Bc056A171fd75Fe9C9789da35B1ffd
-    // 0xAd6226d73C53a0F37A4F551fCc1c1F3B17dB24CA
-    // 0xC333a28917644C2A75bB3A5B42D1dBB11f244E3c
-    // 0xEcd63D57e0e03EeC21CC76B6F374F611260CC81D
-    // 0x0C33268cBaFB2520CC01f11B2D41a5069ec20EcA
     const keyPool = [
-      '0x32cba915afa59d3f6081f64cfce0bed81c15f38300a4d805ecf80caa4309de88',
-      '0x4aa8fe4cc299ee31964deaf6a67eef596866969825a49104e92ed191aad4ab6b',
-      '0x2b202ea4d3b7a57276bdf9574c0eb46c2de17fa3fe6d64b13a18a79847523a96',
-      '0x5b82c3f345916d77814b169d26e515a9ac215ab11ec7aa2ee70459f0fa9d8611',
-      '0x342cfd6037271050d8783cc504077c4b1e11454da8211bfb29ac0a05c9508e9d',
-      // "0x59964d0d2e42d68210d2195a529280e55ac587027fae781adcfeaf6785aec4c2 and address: 0x4252C0fBaB671488b3c3fC2c76D40E1BD844D1e5
-      // "0xe31f34fe0eb308d05725219337ac69d1827f729e5ff36d161323a3cc9e42aeb3 and address: 0xf4cfbCAdB08c618bb98Fbf82090f20897473e15E
-      // "0xb966644b20cfabbb7dfb5aee78e75d587eac777d63eb61516c4f56995022fe33 and address: 0x217978E892E62E19216129694fa439C9FA3CcAB8
-      // "0xc37ec93ae0ac18806ad9d86d1b3e83324b790d67e90ec3139a56b20405472e45 and address: 0x5837B85d7966DEa3025f500b50dBc9BF89058005
-      // "0xb92bd0c7c141fc381efbf5381ec12f674302b3ab29382fec2a6998e073fd1b88 and address: 0x1D5EbEABEE35dbBA6Fd2847401F979b3f6249a93
-      // "0x922a64dac895e4ebedd2e942060f73e85b0bda1ef7cc852c5e194629f437320a and address: 0xe35dEc6912117c165f089F1fCD3f15601B96b3Dd
-      // "0x3569d1263cf81e7f06dec377a41ed2bd509fe882fc170215563e347d6db752ba and address: 0xc727C64CaeB98A915C4389931086156F60b6db25
-      // "0xffecbb174b4aceaa69cccbec90b87dce36ce19abb9a56fe2cc9c3becbec2b847 and address: 0x4E5dC9dF946500b07E9c66e4DD29bf9CD062002B
-      // "0x0b0041a57eac50c87be1b1e25a41f698add5b5b3142b4795d72bd1c4b1d1f2de and address: 0x67bFd0B42F5f39710B4E90301289F81Eab6315dA
-      // "0xa982f591f9334e05b20ee56bf442253f51e527ede300b2cad1731b38e3a017aa and address: 0x12BE474D127757d0a6a36631294F8FfBCdeF44F8
+      '0x32cba915afa59d3f6081f64cfce0bed81c15f38300a4d805ecf80caa4309de88', // 0x9cf1FE84d1Bc056A171fd75Fe9C9789da35B1ffd
+      '0x4aa8fe4cc299ee31964deaf6a67eef596866969825a49104e92ed191aad4ab6b', // 0xAd6226d73C53a0F37A4F551fCc1c1F3B17dB24CA
+      '0x2b202ea4d3b7a57276bdf9574c0eb46c2de17fa3fe6d64b13a18a79847523a96', // 0xC333a28917644C2A75bB3A5B42D1dBB11f244E3c
+      '0x5b82c3f345916d77814b169d26e515a9ac215ab11ec7aa2ee70459f0fa9d8611', // 0xEcd63D57e0e03EeC21CC76B6F374F611260CC81D
+      '0x342cfd6037271050d8783cc504077c4b1e11454da8211bfb29ac0a05c9508e9d', // 0x0C33268cBaFB2520CC01f11B2D41a5069ec20EcA
+      '0x59964d0d2e42d68210d2195a529280e55ac587027fae781adcfeaf6785aec4c2', // 0x4252C0fBaB671488b3c3fC2c76D40E1BD844D1e5
+      '0xe31f34fe0eb308d05725219337ac69d1827f729e5ff36d161323a3cc9e42aeb3', // 0xf4cfbCAdB08c618bb98Fbf82090f20897473e15E
+      '0xb966644b20cfabbb7dfb5aee78e75d587eac777d63eb61516c4f56995022fe33', // 0x217978E892E62E19216129694fa439C9FA3CcAB8
+      '0xc37ec93ae0ac18806ad9d86d1b3e83324b790d67e90ec3139a56b20405472e45', // 0x5837B85d7966DEa3025f500b50dBc9BF89058005
+      '0xb92bd0c7c141fc381efbf5381ec12f674302b3ab29382fec2a6998e073fd1b88', // 0x1D5EbEABEE35dbBA6Fd2847401F979b3f6249a93
+      '0x922a64dac895e4ebedd2e942060f73e85b0bda1ef7cc852c5e194629f437320a', // 0xe35dEc6912117c165f089F1fCD3f15601B96b3Dd
+      '0x3569d1263cf81e7f06dec377a41ed2bd509fe882fc170215563e347d6db752ba', // 0xc727C64CaeB98A915C4389931086156F60b6db25
     ];
     const wallet = new Wallet(keyPool[Math.floor(Math.random() * keyPool.length)]);
     console.log(`Created wallet with this private key: ${wallet.privateKey}`);
@@ -391,8 +427,8 @@ async function generateMessages() {
               signature,
               content,
             } satisfies z.infer<typeof gmMessageInputSchema>;
-          } else {
-            // 22.5% for agent messages
+          } else if (rand < 0.9) {
+            // 12.5% for agent messages
             // Agent message via POST
             try {
               const content = {
@@ -434,6 +470,52 @@ async function generateMessages() {
               } else {
                 console.error('Error sending agent message via POST:', error);
               }
+            }
+          } else {
+            // 10% for observations
+            try {
+              const observationType =
+                Object.values(ObservationType)[
+                  Math.floor(Math.random() * Object.values(ObservationType).length)
+                ];
+
+              const content = {
+                agentId: keyMap[activeConnection.wallet.address],
+                timestamp: Date.now(),
+                roomId: roomAndRound.roomId,
+                roundId: roomAndRound.roundId,
+                observationType,
+                data: getRandomObservation(observationType),
+              };
+
+              const signature = await activeConnection.wallet.signMessage(JSON.stringify(content));
+
+              const observationMessage: z.infer<typeof observationMessageInputSchema> = {
+                messageType: 'observation',
+                sender: activeConnection.wallet.address,
+                signature,
+                content,
+              };
+
+              try {
+                const response = await axios.post(
+                  `${API_BASE_URL}/messages/observations`,
+                  observationMessage
+                );
+
+                console.log(`User ${activeConnection.userId} sent observation via POST:`, {
+                  message: observationMessage,
+                  response: response.data,
+                });
+              } catch (error) {
+                if (error instanceof AxiosError) {
+                  console.error('Error sending observation via POST:', error.response?.data);
+                } else {
+                  console.error('Error sending observation via POST:', error);
+                }
+              }
+            } catch (error) {
+              console.error('Error generating observation message:', error);
             }
           }
 

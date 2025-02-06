@@ -89,9 +89,7 @@ export async function processObservationMessage(
         round_id: roundId,
         pvp_status_effects: {},
         message_type: WsMessageTypes.OBSERVATION,
-        message: JSON.stringify(
-          observation satisfies z.infer<typeof observationMessageAiChatOutputSchema>
-        ),
+        message: observation satisfies z.infer<typeof observationMessageAiChatOutputSchema>,
       },
     });
 
@@ -386,7 +384,7 @@ export async function processGmMessage(
         original_author: gmId, //Not sure what I was thinking with this column.
         pvp_status_effects: {},
         message_type: WsMessageTypes.GM_MESSAGE,
-        message: JSON.stringify(message satisfies z.infer<typeof gmMessageAiChatOutputSchema>),
+        message: message satisfies z.infer<typeof gmMessageAiChatOutputSchema>,
       },
     });
 
