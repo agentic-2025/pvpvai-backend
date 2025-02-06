@@ -228,7 +228,6 @@ export async function processObservationMessage(
     const { data, error } = await supabase
       .from('round_observations')
       .insert({
-        timestamp: observation.content.timestamp,
         round_id: observation.content.roundId,
         observation_type: observation.content.observationType,
         creator: observation.sender,

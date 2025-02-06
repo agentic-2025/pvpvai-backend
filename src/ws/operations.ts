@@ -66,7 +66,7 @@ export class WSOperations {
     const { error } = await supabase.from('round_user_messages').insert(record);
 
     if (error) {
-      console.error('Failed to insert message into round_user_messages:', error);
+      console.error('Failed to insert message into round_user_messages:', JSON.stringify(error));
       //Oh well, we tried (for now)
     }
 
@@ -85,10 +85,14 @@ export class WSOperations {
   }): Promise<void> {
     const { roomId, record, excludeConnection } = params;
 
+    console.log(`Inserting into round_agent_messages (${record.message_type})`, record);
+
     // First insert the message into the database
     const { error } = await supabase.from('round_agent_messages').insert(record);
     if (error) {
-      console.error('Failed to insert message into round_agent_messages:', error);
+      throw new Error('Failed to insert message into round_agent_messages: ' + error);
+      // console.error('Failed to insert message into round_agent_messages:', error);
+
       //Oh well, we tried (for now)
     }
     await this.sendMessageToRoom({
@@ -351,6 +355,7 @@ export class WSOperations {
     //Process GM message takes care of validation + broadcast including a variant of signature verification
     const { error } = await processGmMessage(message);
     if (error) {
+      console.error('Error processing GM message:', error);
       await this.sendSystemMessage(client, error, true, message);
     }
     await this.sendSystemMessage(client, 'GM Message processed and stored', false, message);

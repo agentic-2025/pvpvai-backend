@@ -14,7 +14,9 @@ import {
   ObservationType,
   participantsInputMessageSchema,
   publicChatMessageInputSchema,
+  subscribeRoomInputMessageSchema,
 } from './utils/schemas';
+import { sortObjectKeys } from './utils/sortObjectKeys';
 
 const supabase = createClient<Database>(
   process.env.SUPABASE_URL || '',
@@ -29,6 +31,25 @@ const CONNECTIONS_PER_USER = 5;
 const RECONNECT_INTERVAL = 10000;
 const BAD_MESSAGE_PROBABILITY = 0.005;
 const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3000';
+
+// Message type configuration flags
+const MESSAGE_TYPE_CONFIG = {
+  PUBLIC_CHAT: true,
+  PARTICIPANTS: true, 
+  GM_MESSAGES: true,
+  AGENT_MESSAGES: true,
+  OBSERVATIONS: true,
+  BAD_MESSAGES: false, // Keeping this false by default for safety
+} as const;
+
+// Probability weights for enabled message types (will be normalized based on enabled types)
+const BASE_PROBABILITIES = {
+  PUBLIC_CHAT: 0.35,
+  PARTICIPANTS: 0.20,
+  GM_MESSAGES: 0.225,
+  AGENT_MESSAGES: 0.125,
+  OBSERVATIONS: 0.10,
+} as const;
 
 const randomDelay = () => Math.floor(Math.random() * (MAX_DELAY - MIN_DELAY + 1)) + MIN_DELAY;
 
@@ -207,6 +228,34 @@ async function signMessage(content: any): Promise<string> {
   return messageHash;
 }
 
+// Helper function to calculate normalized probabilities based on enabled types
+function calculateProbabilities() {
+  const enabledTypes = Object.entries(MESSAGE_TYPE_CONFIG)
+    .filter(([key, enabled]) => enabled && key in BASE_PROBABILITIES)
+    .map(([key]) => key);
+
+  if (enabledTypes.length === 0) {
+    console.warn('No message types enabled! Defaulting to PUBLIC_CHAT only.');
+    return { PUBLIC_CHAT: 1 };
+  }
+
+  const totalWeight = enabledTypes.reduce(
+    (sum, type) => sum + (BASE_PROBABILITIES[type as keyof typeof BASE_PROBABILITIES] || 0),
+    0
+  );
+
+  const normalized = {} as Record<string, number>;
+  let accumulator = 0;
+
+  enabledTypes.forEach(type => {
+    const baseProb = BASE_PROBABILITIES[type as keyof typeof BASE_PROBABILITIES] || 0;
+    normalized[type] = accumulator + (baseProb / totalWeight);
+    accumulator = normalized[type];
+  });
+
+  return normalized;
+}
+
 async function generateMessages() {
   const testUsers = await getTestUsers();
   if (!testUsers) {
@@ -335,10 +384,8 @@ async function generateMessages() {
             connection.ws.send(
               JSON.stringify({
                 messageType: WsMessageTypes.SUBSCRIBE_ROOM,
-                sender: connection.wallet.address,
-                signature,
-                content,
-              })
+                content: sortObjectKeys(content),
+              } satisfies z.infer<typeof subscribeRoomInputMessageSchema>)
             );
           }
 
@@ -350,10 +397,8 @@ async function generateMessages() {
           connection.ws.send(
             JSON.stringify({
               messageType: WsMessageTypes.SUBSCRIBE_ROOM,
-              sender: connection.wallet.address,
-              signature,
-              content,
-            })
+              content: sortObjectKeys(content),
+            } satisfies z.infer<typeof subscribeRoomInputMessageSchema>)
           );
 
           connection.isSubscribed = true;
@@ -371,10 +416,11 @@ async function generateMessages() {
           const rand = Math.random();
           let message;
 
-          // if (rand < BAD_MESSAGE_PROBABILITY) {
-          //   message = generateBadMessage();
-          // } else
-          if (rand < 0.35) {
+          const probabilities = calculateProbabilities();
+
+          if (MESSAGE_TYPE_CONFIG.BAD_MESSAGES && rand < BAD_MESSAGE_PROBABILITY) {
+            message = generateBadMessage();
+          } else if (MESSAGE_TYPE_CONFIG.PUBLIC_CHAT && rand < probabilities.PUBLIC_CHAT) {
             console.log('Sending public chat message');
             // 35% for public chat
             // Public chat message
@@ -385,7 +431,9 @@ async function generateMessages() {
               text: getRandomMessage(),
               timestamp: Date.now(),
             };
-            const signature = await activeConnection.wallet.signMessage(JSON.stringify(content));
+            const signature = await activeConnection.wallet.signMessage(
+              JSON.stringify(sortObjectKeys(content))
+            );
 
             message = {
               messageType: WsMessageTypes.PUBLIC_CHAT,
@@ -393,7 +441,7 @@ async function generateMessages() {
               signature,
               content,
             } satisfies z.infer<typeof publicChatMessageInputSchema>;
-          } else if (rand < 0.55) {
+          } else if (MESSAGE_TYPE_CONFIG.PARTICIPANTS && rand < probabilities.PARTICIPANTS) {
             // 20% for participants
             // Participants request
             const content = {
@@ -403,9 +451,9 @@ async function generateMessages() {
 
             message = {
               messageType: WsMessageTypes.PARTICIPANTS,
-              content,
+              content: sortObjectKeys(content),
             } satisfies z.infer<typeof participantsInputMessageSchema>;
-          } else if (rand < 0.775) {
+          } else if (MESSAGE_TYPE_CONFIG.GM_MESSAGES && rand < probabilities.GM_MESSAGES) {
             // 22.5% for GM messages
             // GM message
             const content = {
@@ -419,15 +467,17 @@ async function generateMessages() {
               message: getRandomGMMessage(),
             };
 
-            const signature = await backendEthersSigningWallet.signMessage(JSON.stringify(content));
+            const signature = await backendEthersSigningWallet.signMessage(
+              JSON.stringify(sortObjectKeys(content))
+            );
 
             message = {
               messageType: WsMessageTypes.GM_MESSAGE,
               sender: backendEthersSigningWallet.address,
               signature,
-              content,
+              content: sortObjectKeys(content),
             } satisfies z.infer<typeof gmMessageInputSchema>;
-          } else if (rand < 0.9) {
+          } else if (MESSAGE_TYPE_CONFIG.AGENT_MESSAGES && rand < probabilities.AGENT_MESSAGES) {
             // 12.5% for agent messages
             // Agent message via POST
             try {
@@ -439,11 +489,13 @@ async function generateMessages() {
                 text: getRandomAgentMessage(),
               };
               console.log('signingWallet', activeConnection.wallet.address);
-              const signature = await activeConnection.wallet.signMessage(JSON.stringify(content));
+              const signature = await activeConnection.wallet.signMessage(
+                JSON.stringify(sortObjectKeys(content))
+              );
 
               console.log('signature', signature);
               const { signer, error: signatureError } = verifySignedMessage(
-                content,
+                sortObjectKeys(content),
                 signature,
                 activeConnection.wallet.address,
                 content.timestamp,
@@ -454,7 +506,7 @@ async function generateMessages() {
                 messageType: WsMessageTypes.AGENT_MESSAGE,
                 sender: activeConnection.wallet.address,
                 signature,
-                content,
+                content: sortObjectKeys(content),
               } satisfies z.infer<typeof agentMessageInputSchema>;
               console.log('message', message);
 
@@ -471,7 +523,7 @@ async function generateMessages() {
                 console.error('Error sending agent message via POST:', error);
               }
             }
-          } else {
+          } else if (MESSAGE_TYPE_CONFIG.OBSERVATIONS && rand <= probabilities.OBSERVATIONS) {
             // 10% for observations
             try {
               const observationType =
@@ -494,7 +546,7 @@ async function generateMessages() {
                 messageType: 'observation',
                 sender: activeConnection.wallet.address,
                 signature,
-                content,
+                content: sortObjectKeys(content) satisfies z.infer<typeof observationMessageInputSchema>,
               };
 
               try {

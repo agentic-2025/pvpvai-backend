@@ -34,28 +34,7 @@ export async function messagesRoutes(server: FastifyInstance) {
       schema: {
         body: {
           type: 'object',
-          required: ['roomId', 'roundId', 'observation'],
-          properties: {
-            roomId: { type: 'string' },
-            roundId: { type: 'string' },
-            observation: { type: 'string' },
-          },
-        },
-        response: {
-          200: {
-            type: 'object',
-            required: ['message', 'data', 'error'],
-            properties: {
-              message: { type: 'string' },
-              data: {
-                type: 'object',
-                additionalProperties: true,
-              },
-              error: {
-                type: ['string', 'null'],
-              },
-            },
-          },
+          required: ['signature', 'messageType', 'sender', 'content'],
         },
       },
     },
@@ -85,9 +64,9 @@ export async function messagesRoutes(server: FastifyInstance) {
     },
     async (request, reply) => {
       const { data, error } = agentMessageInputSchema.safeParse(request.body);
-      
+
       if (error) {
-        console.log('invalid agent message', error);
+        console.log(`invalid agent message (${request.body?.messageType})`, error);
         return reply.status(400).send({
           message: 'Invalid agent message',
           error: error.message,
@@ -114,7 +93,7 @@ export async function messagesRoutes(server: FastifyInstance) {
       schema: {
         body: {
           type: 'object',
-          required: ['roomId', 'roundId', 'message'],
+          required: ['signature', 'messageType', 'sender', 'content'],
         },
       },
     },

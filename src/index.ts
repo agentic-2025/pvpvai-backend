@@ -88,6 +88,7 @@ server.register(async function (fastify) {
             break;
 
           case WsMessageTypes.GM_MESSAGE:
+            console.log('Handling GM message:', data);
             await wsOps.handleGmMessage(client, data);
             break;
 
