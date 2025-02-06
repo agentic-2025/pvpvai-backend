@@ -508,11 +508,26 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      create_round_from_room: {
+        Args: {
+          room_id_param: number
+        }
+        Returns: {
+          id: number
+          room_id: number
+          active: boolean
+          status: Database["public"]["Enums"]["round_status"]
+          round_config: Json
+          created_at: string
+          updated_at: string
+        }[]
+      }
       get_active_rooms_needing_rounds: {
         Args: Record<PropertyKey, never>
         Returns: {
           id: number
           active: boolean
+          contract_address: string
           room_config: Json
         }[]
       }
@@ -522,6 +537,8 @@ export type Database = {
           id: number
           active: boolean
           room_config: Json
+          room_id: number
+          contract_address: string
         }[]
       }
     }
