@@ -7,6 +7,21 @@ import { getRoomContract } from "./room-contract";
 import { wsOps } from "./ws/operations";
 
 
+
+const contract = getRoomContract("0xb6d8A85fC149F13779518DC1D3D14434f3aD3ff7");
+
+// Listen for the RoundCreated event
+contract.on("RoundStarted", (roundId, startTime, endTime) => {
+  console.log(`RoundCreated event detected: roundId=${roundId}, startTime=${startTime}, startTime=${endTime}`);
+  // Add your logic to handle the event here
+});
+
+contract.on("*", (event) => {
+  console.log(`Event detected: ${event.event}`);
+  console.log(event);
+  // Add your logic to handle the event here
+});
+
 async function checkAndCreateRounds() {
   try {
     // Query rooms that need new rounds
@@ -19,8 +34,8 @@ async function checkAndCreateRounds() {
 
     // Process each room that needs a new round
     for (const room of roomsNeedingRounds || []) {
-      // console.log(room.id);
       await createNewRound(room);
+      break;
     }
 
   } catch (error) {
@@ -57,10 +72,14 @@ async function createNewRound(room: Database['public']['Functions']['get_active_
       return;
     }
 
-    const contract = await getRoomContract("0xb6d8A85fC149F13779518DC1D3D14434f3aD3ff7");
-    const tx = await contract.createRound();
-
+    // TODO: use room contract address from room config
+    const tx = await contract.startRound();
     const receipt = await tx.wait();
+
+    console.log(receipt);
+
+    return;
+
     // Listen for RoundCreated event
     const roundCreatedEvent = receipt.events?.find(
       (event: any) => event.event === "RoundCreated"
@@ -138,8 +157,9 @@ async function startCloseRound(round: Database['public']['Functions']['get_activ
       },
     },
   })
-
 }
 
-const job = new CronJob('*/10 * * * * *', checkAndCreateRounds);
+
+
+const job = new CronJob('*/60 * * * * *', checkAndCreateRounds);
 job.start();
