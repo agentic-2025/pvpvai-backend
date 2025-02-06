@@ -410,10 +410,14 @@ export const roomSetupSchema = z.object({
 
 export const agentAddSchema = z.object({
   agent_id: z.number().int().positive(),
+  wallet_address: z.string()
 });
 
 export const agentBulkAddSchema = z.object({
-  agent_ids: z.array(z.number().int().positive()),
+  agents: z.array(z.object({
+    id: z.number().int().positive(),
+    walletAddress: z.string()
+  }))
 });
 
 // Round related schemas

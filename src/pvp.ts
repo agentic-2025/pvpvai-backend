@@ -13,7 +13,7 @@
 
 // Standard types PVP implementation SILENCE DEAFEN POISON
 import { supabase } from './config';
-import { PvpActions, PvpActionTypes, PoisonStatus } from './types/pvp';
+import { PvpActions, PoisonStatus } from './types/pvp';
 import { RoundMessageDB } from './types/roundTypes';
 
 // Core response type for PvP effect application
@@ -21,7 +21,7 @@ export interface PvPResult {
   message: RoundMessageDB | null;     // Original or modified message (null if blocked)
   targets: number[];                  // Final list of target agents after effects
   actions: {
-    type: PvpActions | PvpActionTypes;// Type of PvP action applied
+    type: PvpActions                  // Type of PvP action applied
     source: number;                   // Agent who applied the effect
     target: number;                   // Agent affected by the effect
     effect: string;                   // Result of the effect (e.g., 'message_blocked')

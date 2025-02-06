@@ -6,6 +6,26 @@ type VerificationResult = {
   error?: string;
 };
 
+// Helper function for deterministic stringification (MUST MATCH CLIENT)
+function sortObjectKeys(obj: any): any {
+  if (typeof obj !== 'object' || obj === null) {
+    return obj; // Return as is if not an object
+  }
+
+  if (Array.isArray(obj)) {
+    return obj.map(sortObjectKeys); // Recursively sort arrays
+  }
+
+  const sortedObj: { [key: string]: any } = {};
+  Object.keys(obj)
+    .sort() // Sort keys alphabetically
+    .forEach((key) => {
+      sortedObj[key] = sortObjectKeys(obj[key]); // Recursively sort nested objects
+    });
+
+  return sortedObj;
+}
+
 export const verifySignedMessage = (
   content: any,
   signature: string,
@@ -32,33 +52,31 @@ export const verifySignedMessage = (
     };
   }
 
-    const messageString = JSON.stringify(content);
-    const hash = hashMessage(messageString);
-    const digest = getBytes(hash);
-    const recoveredAddress = recoverAddress(digest, signature);
+  // *** Deterministic Stringification (CRITICAL) ***
+  const messageString = JSON.stringify(sortObjectKeys(content));
 
-    if (recoveredAddress.toLowerCase() !== sender.toLowerCase()) {
-      return {
-        signer: recoveredAddress,
-        error: `Signature verification failed, expected sender address: ${sender} but recovered address: ${recoveredAddress}`,
-      };
-    }
+  const hash = hashMessage(messageString);
+  const digest = getBytes(hash);
+  const recoveredAddress = recoverAddress(digest, signature);
 
+  if (recoveredAddress.toLowerCase() !== sender.toLowerCase()) {
     return {
       signer: recoveredAddress,
+      error: `Signature verification failed, expected sender address: ${sender} but recovered address: ${recoveredAddress}.  Message string: ${messageString}`, // Added message string to error
     };
- 
+  }
+
+  return {
+    signer: recoveredAddress,
+  };
 };
 
 export const signMessage = async (
   messageContent: any,
   wallet: Wallet = backendEthersSigningWallet
 ): Promise<string> => {
-  const timestamp = Date.now();
-  // Combine timestamp and message into a single string
-  const messageString = JSON.stringify({
-    content: messageContent,
-  });
+  // *** Deterministic Stringification (CRITICAL) ***
+  const messageString = JSON.stringify(sortObjectKeys(messageContent));
 
   // Sign the message using ethers
   const signature = await wallet.signMessage(messageString);

@@ -2,6 +2,7 @@ import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { SIGNATURE_WINDOW_MS } from '../config';
 import { verifySignedMessage } from '../utils/auth';
+import { sortObjectKeys } from '../utils/sortObjectKeys';
 
 // Zod schema for auth data in body
 export const signedRequestBodySchema = z
@@ -32,7 +33,7 @@ export const signatureVerificationPlugin = async (
     const { content, signature, sender } = body;
 
     const { error } = verifySignedMessage(
-      content,
+      sortObjectKeys(content), // Ensure deterministic content ordering
       signature,
       sender,
       content.timestamp,

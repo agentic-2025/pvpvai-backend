@@ -8,7 +8,7 @@ export enum WsMessageTypes {
   // Sent by: Single user
   // Purpose: Response to a health check from the WS Server
   HEARTBEAT = 'heartbeat',
-  // Sent by: Single user
+  // Sent by: Single user 
   // Purpose: Get the total number of participants in the room to display in the UI
   PARTICIPANTS = 'participants',
 

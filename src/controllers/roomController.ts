@@ -31,8 +31,9 @@ export class RoomController {
         return { success: false, error: 'Room creation failed' };
       }
 
+      // Update agent adding to include wallet addresses
       const agentAddPromises = Object.entries(setupData.agents).map(([id, { wallet, webhook }]) =>
-        roomService.addAgentToRoom(room.id, parseInt(id))
+        roomService.addAgentToRoom(room.id, parseInt(id), wallet)
       );
 
       await Promise.all(agentAddPromises);
@@ -51,7 +52,11 @@ export class RoomController {
     return await roomService.isAgentInRoom(roomId, agentId);
   }
 
-  async addAgentToRoom(roomId: number, agentId: number): Promise<RoomOperationResult<DBRoomAgent>> {
+  async addAgentToRoom(
+    roomId: number, 
+    agentId: number, 
+    walletAddress: string
+  ): Promise<RoomOperationResult<DBRoomAgent>> {
     // Validate room exists and is active
     const roomResult = await roomService.findRoomById(roomId);
     if (!roomResult.success || !roomResult.data) {
@@ -62,12 +67,12 @@ export class RoomController {
       return { success: false, error: 'Room is not active' };
     }
 
-    return await roomService.addAgentToRoom(roomId, agentId);
+    return await roomService.addAgentToRoom(roomId, agentId, walletAddress);
   }
 
   async bulkAddAgentsToRoom(
     roomId: number,
-    agentIds: number[]
+    agents: Array<{ id: number; walletAddress: string }>
   ): Promise<RoomOperationResult<DBRoomAgent[]>> {
     // Validate room exists and is active
     const roomResult = await roomService.findRoomById(roomId);
@@ -79,7 +84,7 @@ export class RoomController {
       return { success: false, error: 'Room is not active' };
     }
 
-    return await roomService.bulkAddAgentsToRoom(roomId, agentIds);
+    return await roomService.bulkAddAgentsToRoom(roomId, agents);
   }
 }
 
