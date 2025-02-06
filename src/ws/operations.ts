@@ -20,11 +20,42 @@ export type RoomMap = Map<number, Set<WebSocket>>;
 export type ClientInfo = Map<WebSocket, { roomId: number }>;
 export type HeartbeatMap = Map<WebSocket, NodeJS.Timeout>;
 
+interface ClientMetadata {
+  roomId: number;
+  lastActivity: number;
+}
+
+interface MessageType {
+  messageType: WsMessageTypes;
+  content: {
+    timestamp: number;
+    roundId: number;
+    roomId: number;
+    [key: string]: any;
+  };
+}
+
+// Type guard to verify message structure
+function isMessageType(message: unknown): message is MessageType {
+  if (!message || typeof message !== 'object') return false;
+  
+  const msg = message as any;
+  return (
+    'messageType' in msg &&
+    'content' in msg &&
+    typeof msg.content === 'object' &&
+    'timestamp' in msg.content &&
+    'roundId' in msg.content &&
+    'roomId' in msg.content
+  );
+}
+
 export class WSOperations {
   private rooms: RoomMap;
-  private clientInfo: ClientInfo;
+  private clientInfo: Map<WebSocket, ClientMetadata>;
   private clientHeartbeats: HeartbeatMap;
   private readonly HEARTBEAT_TIMEOUT = 10000;
+  private readonly MAX_RETRIES = 3;
 
   constructor() {
     this.rooms = new Map();
@@ -83,23 +114,53 @@ export class WSOperations {
     record: Database['public']['Tables']['round_agent_messages']['Insert'];
     excludeConnection?: WebSocket;
   }): Promise<void> {
-    const { roomId, record, excludeConnection } = params;
+    try {
+      const { roomId, record } = params;
 
-    console.log(`Inserting into round_agent_messages (${record.message_type})`, record);
+      // Validate message format
+      if (!record.message || !record.agent_id || !record.round_id) {
+        throw new Error('Invalid message format');
+      }
 
-    // First insert the message into the database
-    const { error } = await supabase.from('round_agent_messages').insert(record);
-    if (error) {
-      throw new Error('Failed to insert message into round_agent_messages: ' + error);
-      // console.error('Failed to insert message into round_agent_messages:', error);
+      // Validate and type-cast message
+      if (!isMessageType(record.message)) {
+        throw new Error('Invalid message structure');
+      }
 
-      //Oh well, we tried (for now)
+      const message = record.message;
+
+      // Store in database with retries
+      await this.retryOperation(async () => {
+        const { error } = await supabase
+          .from('round_agent_messages')
+          .insert({
+            ...record,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          });
+        
+        if (error) throw error;
+      });
+
+      // Broadcast with proper format
+      await this.sendMessageToRoom({
+        roomId,
+        message: {
+          messageType: message.messageType,
+          content: {
+            ...message.content,
+            timestamp: Date.now(),
+            roundId: record.round_id,
+            roomId
+          }
+        },
+        excludeConnection: params.excludeConnection
+      });
+
+    } catch (error) {
+      console.error('Error in broadcastToAiChat:', error);
+      throw error;
     }
-    await this.sendMessageToRoom({
-      roomId,
-      message: record.message,
-      excludeConnection,
-    });
   }
 
   async broadcastParticipantsToRoom(params: { roomId: number; count: number }): Promise<void> {
@@ -113,7 +174,7 @@ export class WSOperations {
       },
     };
 
-    await this.sendMessageToRoom({
+    await this.sendMessageToRoom({ 
       roomId,
       message,
     });
@@ -124,11 +185,18 @@ export class WSOperations {
     message: any;
     excludeConnection?: WebSocket;
   }): Promise<void> {
-    // Then broadcast to room participants
     const room = this.rooms.get(params.roomId);
-    if (!room) {
-      console.log(
-        `Room ${params.roomId} has no connections, will not broadcast message: `,
+    
+    // Enhanced logging
+    console.log(`Sending message to room ${params.roomId}:`, {
+      hasRoom: !!room,
+      connectionCount: room?.size || 0,
+      messageType: params.message?.messageType,
+    });
+
+    if (!room || room.size === 0) {
+      console.warn(
+        `Room ${params.roomId} has no active connections, message will not be broadcast:`,
         params.message
       );
       return;
@@ -136,20 +204,32 @@ export class WSOperations {
 
     const messageString = JSON.stringify(params.message);
     const sendPromises: Promise<void>[] = [];
+    const failedClients: WebSocket[] = [];
 
     room.forEach((client) => {
       if (client !== params.excludeConnection && client.readyState === WebSocket.OPEN) {
         sendPromises.push(
           new Promise<void>((resolve, reject) => {
-            client.send(messageString, (err: any) => {
-              if (err) reject(err);
-              else resolve();
+            client.send(messageString, (err?: Error) => {
+              if (err) {
+                failedClients.push(client);
+                reject(err);
+              } else {
+                resolve();
+              }
             });
           }).catch((err) => {
             console.error(`Failed to send message to client in room ${params.roomId}:`, err);
           })
         );
+      } else if (client.readyState !== WebSocket.OPEN) {
+        failedClients.push(client);
       }
+    });
+
+    // Clean up failed clients
+    failedClients.forEach(client => {
+      this.cleanup(client);
     });
 
     await Promise.all(sendPromises);
@@ -238,56 +318,56 @@ export class WSOperations {
     message: z.infer<typeof subscribeRoomInputMessageSchema>
   ): Promise<void> {
     try {
-      if (!message.content?.roomId) {
-        await this.sendSystemMessage(
-          client,
-          'Subscribe message needs content.room_id',
-          true,
-          message
-        );
-        return;
-      }
-
       const roomId = message.content.roomId;
+      
+      // Check room exists first to fail fast
+      const { error: roomError } = await supabase
+        .from('rooms')
+        .select('*')
+        .eq('id', roomId)
+        .single();
 
-      // Check if room exists
-      const { error } = await supabase.from('rooms').select('*').eq('id', roomId).single();
-
-      if (error) {
-        await this.sendSystemMessage(client, 'Room does not exist', true, message);
+      if (roomError) {
+        await this.sendSystemMessage(client, 'Room does not exist', true);
         return;
       }
-
+      
       // Initialize room if needed
       if (!this.rooms.has(roomId)) {
         this.rooms.set(roomId, new Set());
       }
-
-      // Add connection to room
+      
       const room = this.rooms.get(roomId)!;
+      
+      // Add client to room with metadata
       room.add(client);
-      this.clientInfo.set(client, { roomId });
+      this.clientInfo.set(client, { 
+        roomId,
+        lastActivity: Date.now()
+      });
 
-      // Update participant count in database
-      const { error: updateError } = await supabase
-        .from('rooms')
-        .update({ participants: room.size })
-        .eq('id', roomId);
-
-      if (updateError) {
-        console.error('Failed to update participant count:', updateError);
-      }
-
-      await this.sendSystemMessage(client, 'Subscribed to room', false, message);
-      await this.broadcastParticipantsToRoom({ roomId: roomId, count: room.size });
-    } catch (error) {
-      console.error(`Failed to handle subscribe room message:`, error);
+      // Send immediate confirmation
       await this.sendSystemMessage(
-        client,
-        'Failed to handle subscribe room message',
-        true,
-        message
+        client, 
+        'Subscribed to room',
+        false
       );
+
+      // Setup heartbeat after confirmation
+      const heartbeatInterval = this.setupHeartbeat(client);
+      this.clientHeartbeats.set(client, heartbeatInterval);
+
+      // Update participant count and broadcast
+      await this.updateParticipantCount(roomId, room.size);
+      await this.broadcastParticipantsToRoom({
+        roomId,
+        count: room.size
+      });
+
+      console.log(`Client subscribed to room ${roomId}. Participants: ${room.size}`);
+    } catch (error) {
+      console.error('Error in handleSubscribeRoom:', error);
+      await this.sendSystemMessage(client, 'Failed to subscribe to room', true);
     }
   }
 
@@ -337,13 +417,21 @@ export class WSOperations {
   handleHeartbeat(client: WebSocket): void {
     const timeout = this.clientHeartbeats.get(client);
     if (timeout) clearTimeout(timeout);
-    this.clientHeartbeats.delete(client);
+    
+    // Add proper client tracking
     const info = this.clientInfo.get(client);
-    if (info) {
-      console.log(
-        `Received heartbeat from client ${client.url || 'unknown'} in room ${info.roomId}`
-      );
+    if (!info) {
+      console.warn('Heartbeat received from untracked client');
+      return;
     }
+    
+    // Update last activity timestamp
+    info.lastActivity = Date.now();
+    this.clientHeartbeats.set(client, setTimeout(() => {
+      this.cleanup(client);
+    }, this.HEARTBEAT_TIMEOUT));
+
+    console.log(`Heartbeat processed for client in room ${info.roomId}`);
   }
 
   // TODO This is a debug route, remove before prod
@@ -362,25 +450,28 @@ export class WSOperations {
   }
 
   setupHeartbeat(client: WebSocket): NodeJS.Timeout {
+    // Clear any existing heartbeat
+    const existingHeartbeat = this.clientHeartbeats.get(client);
+    if (existingHeartbeat) {
+      clearInterval(existingHeartbeat);
+    }
+
+    // Set new heartbeat 
     return setInterval(() => {
-      if (this.clientHeartbeats.has(client)) {
+      const info = this.clientInfo.get(client);
+      if (!info || Date.now() - info.lastActivity > this.HEARTBEAT_TIMEOUT) {
         client.close(1000, 'Heartbeat missed');
         this.cleanup(client);
+        return;
       }
 
-      const heartbeatMessage: z.infer<typeof heartbeatOutputMessageSchema> = {
-        messageType: WsMessageTypes.HEARTBEAT,
-        content: {},
-      };
-      client.send(JSON.stringify(heartbeatMessage));
-
-      this.clientHeartbeats.set(
-        client,
-        setTimeout(() => {
-          client.close(1000, 'Heartbeat timeout');
-        }, this.HEARTBEAT_TIMEOUT)
-      );
-    }, this.HEARTBEAT_TIMEOUT * 3) as NodeJS.Timeout;
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(JSON.stringify({
+          messageType: WsMessageTypes.HEARTBEAT,
+          content: {}
+        }));
+      }
+    }, this.HEARTBEAT_TIMEOUT * 2);
   }
 
   // Update cleanup method
@@ -393,6 +484,53 @@ export class WSOperations {
     const timeout = this.clientHeartbeats.get(client);
     if (timeout) clearTimeout(timeout);
     this.clientHeartbeats.delete(client);
+  }
+
+  // Add debug method to check room state
+  public getRoomState(roomId: number): {
+    connections: number;
+    clients: { readyState: number }[];
+  } {
+    const room = this.rooms.get(roomId);
+    if (!room) {
+      return { connections: 0, clients: [] };
+    }
+
+    return {
+      connections: room.size,
+      clients: Array.from(room).map(ws => ({
+        readyState: ws.readyState
+      }))
+    };
+  }
+
+  private async retryOperation(operation: () => Promise<void>): Promise<void> {
+    let retries = this.MAX_RETRIES;
+    while (retries > 0) {
+      try {
+        await operation();
+        return;
+      } catch (err) {
+        retries--;
+        if (retries === 0) throw err;
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
+  }
+
+  private async updateParticipantCount(roomId: number, count: number): Promise<void> {
+    try {
+      const { error } = await supabase
+        .from('rooms')
+        .update({ participants: count })
+        .eq('id', roomId);
+
+      if (error) {
+        console.error('Failed to update participant count:', error);
+      }
+    } catch (error) {
+      console.error('Error updating participant count:', error);
+    }
   }
 }
 
