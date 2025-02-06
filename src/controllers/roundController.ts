@@ -42,7 +42,7 @@ export class RoundController {
     return await roundService.getOrCreateActiveRound(roomId);
   }
 
-  // the body of processAgentMessage was moved to roundController.ts since, currently, agent messages only come in over REST
+  // the body of processAgentMessage was moved to messageHandler.ts since, currently, agent messages only come in over REST
   // can move that functionality back to a common method later when/if we support agent sending message over WS
 
   async endRound(roundId: number, outcome?: any): Promise<RoomOperationResult<void>> {
