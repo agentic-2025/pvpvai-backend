@@ -1,4 +1,3 @@
-
 -- drop function if exists get_active_rounds_to_close;
 CREATE OR REPLACE FUNCTION get_active_rounds_to_close()
 RETURNS TABLE(id int, active boolean, room_config jsonb, room_id int, contract_address text) AS $$
@@ -13,10 +12,9 @@ BEGIN
     WHERE   rounds.active = true
             AND (
               rounds.status = 'OPEN' and NOW() > (rounds.created_At + (rounds.round_config->>'round_duration')::interval)
-              -- clean up
-                -- OR
-              -- (rounds.status = 'CLOSING'  AND rounds.updated_at < NOW() - INTERVAL '60 seconds')
-            );
+              
+            ) 
+            -- OR (rounds.status = 'CLOSING'  AND rounds.updated_at < NOW() - INTERVAL '60 seconds');
 END;
 $$ LANGUAGE plpgsql;
 

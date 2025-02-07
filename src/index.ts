@@ -1,6 +1,8 @@
 import cors from '@fastify/cors';
 import websocket from '@fastify/websocket';
+import { CronJob } from 'cron';
 import fastify from 'fastify';
+import { checkAndCloseRounds, checkAndCreateRounds } from './bg-sync';
 import { wsOps } from './config';
 import { signatureVerificationPlugin } from './middleware/signatureVerification';
 import zodSchemaPlugin from './plugins/zodSchema';
@@ -129,4 +131,7 @@ const start = async () => {
 
 start();
 
-
+const job = new CronJob('*/10 * * * * *', checkAndCreateRounds);
+job.start();
+const job2 = new CronJob('*/10 * * * * *', checkAndCloseRounds);
+job2.start();

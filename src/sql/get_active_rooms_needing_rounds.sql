@@ -18,8 +18,7 @@ BEGIN
        --     AND (
               --   rooms.contract_address is not null
 
-                -- OR
-                -- (rounds.status = 'STARTING'  AND rounds.active=TRUE AND rounds.updated_at < NOW() - INTERVAL '60 seconds')
+                OR (rounds.status = 'STARTING'  AND rounds.active=TRUE AND rounds.updated_at < NOW() - INTERVAL '60 seconds')
        --      );
 END;
 $$ LANGUAGE plpgsql;

@@ -12,7 +12,7 @@ import { sortObjectKeys } from './utils/sortObjectKeys';
 import { gmMessageInputSchema } from "./utils/schemas";
 import { z } from "zod";
 
-async function checkAndCreateRounds() {
+export async function checkAndCreateRounds() {
   try {
     // Query rooms that need new rounds
     console.log("checking for rooms needing rounds");
@@ -34,7 +34,7 @@ async function checkAndCreateRounds() {
   }
 }
 
-async function createNewRound(room: Database['public']['Functions']['get_active_rooms_needing_rounds']['Returns'][0]) {
+export async function createNewRound(room: Database['public']['Functions']['get_active_rooms_needing_rounds']['Returns'][0]) {
   try {
     const { data: newRound, error: insertError } = await supabase
     .rpc('create_round_from_room', {
@@ -72,7 +72,7 @@ async function createNewRound(room: Database['public']['Functions']['get_active_
   }
 }
 
-async function checkAndCloseRounds() {
+export async function checkAndCloseRounds() {
   try {
     // Query rounds that needs to be closed
     console.log("checking for rounds to close");
@@ -94,7 +94,7 @@ async function checkAndCloseRounds() {
   }
 }
 
-async function closeRound(round: Database['public']['Functions']['get_active_rounds_to_close']['Returns'][0]) {
+export async function closeRound(round: Database['public']['Functions']['get_active_rounds_to_close']['Returns'][0]) {
   console.log("closing round", round.id);
   const { error: updateError3} = await supabase
       .from('rounds')
@@ -234,7 +234,4 @@ async function closeRound(round: Database['public']['Functions']['get_active_rou
   }
 }
 
-const job = new CronJob('*/20 * * * * *', checkAndCreateRounds);
-job.start();
-const job2 = new CronJob('*/20 * * * * *', checkAndCloseRounds);
-job2.start();
+
