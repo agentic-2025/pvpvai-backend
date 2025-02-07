@@ -1,4 +1,4 @@
-import { getBytes, hashMessage, recoverAddress } from 'ethers';
+import { getBytes, hashMessage, recoverAddress, Wallet } from 'ethers';
 import { sortObjectKeys } from './sortObjectKeys';
 
 /**
@@ -21,13 +21,35 @@ import { sortObjectKeys } from './sortObjectKeys';
  * 4. Sign/verify the resulting string
  */
 
+export interface MessageContent {
+  timestamp: number;
+  roomId: string;
+  roundId: string;
+  agentId: string;
+  text: string;
+}
+
 interface VerificationResult {
   signer: string;
   error?: string;
 }
 
+export const signMessage = async (
+  content: MessageContent,
+  privateKey: string
+): Promise<string> => {
+  try {
+    // Use deterministic stringification
+    const messageString = JSON.stringify(sortObjectKeys(content));
+    const wallet = new Wallet(privateKey);
+    return await wallet.signMessage(messageString);
+  } catch (error) {
+    throw new Error(`Failed to sign message: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+};
+
 export const verifySignedMessage = (
-  content: any,
+  content: MessageContent,
   signature: string,
   sender: string,
   timestamp: number,

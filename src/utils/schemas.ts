@@ -120,6 +120,15 @@ export const agentMessageInputSchema = z.object({
     roundId: z.number(),
     agentId: z.number(),
     text: z.string(),
+    context: z.array(z.object({ // added optional
+      id: z.number(),
+      message: z.any(),
+      message_type: z.string(),
+      created_at: z.string(),
+      agent_id: z.number(),
+      original_author: z.number(),
+      pvp_status_effects: z.record(z.string(), z.any())
+    })).optional()
   }),
 });
 
