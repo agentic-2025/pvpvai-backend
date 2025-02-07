@@ -98,21 +98,42 @@ export async function messagesRoutes(server: FastifyInstance) {
       },
     },
     async (request, reply) => {
+      console.log('Received GM message request:', {
+        messageType: request.body?.messageType,
+        sender: request.body?.sender,
+        content: request.body?.content
+      });
+
       const { data, error } = gmMessageInputSchema.safeParse(request.body);
       
       if (error) {
-        console.log(`invalid GM message format:`, error);
+        console.error('GM message validation failed:', {
+          error: error.message,
+          issues: error.issues,
+          receivedData: request.body
+        });
         return reply.status(400).send({
           message: 'Invalid GM message format',
           error: error.message,
+          data: { issues: error.issues }
         });
       }
 
       const result = await processGmMessage(data);
       
-      // Add proper error logging
       if (result.error) {
-        console.error('Error processing GM message:', result.error);
+        console.error('GM message processing failed:', {
+          error: result.error,
+          statusCode: result.statusCode,
+          gmId: data.content.gmId,
+          roomId: data.content.roomId
+        });
+      } else {
+        console.log('GM message processed successfully:', {
+          gmId: data.content.gmId,
+          roomId: data.content.roomId,
+          statusCode: result.statusCode
+        });
       }
       
       return reply.status(result.statusCode).send({

@@ -26,9 +26,17 @@ async function zodSchemaPlugin(server: FastifyInstance) {
 
   server.setErrorHandler((error, request, reply) => {
     if (error instanceof ZodError) {
+      console.error('Zod validation error:', {
+        path: request.url,
+        method: request.method,
+        issues: error.issues,
+        body: request.body
+      });
+      
       reply.status(400).send({
         error: 'Validation error',
-        details: error.issues
+        details: error.issues,
+        path: request.url
       });
       return;
     }

@@ -88,8 +88,24 @@ server.register(async function (fastify) {
             break;
 
           case WsMessageTypes.GM_MESSAGE:
-            console.log('Handling GM message:', data);
-            await wsOps.handleGmMessage(client, data);
+            console.log('Processing WebSocket GM message:', {
+              messageType: data.messageType,
+              sender: data.sender,
+              timestamp: data.content?.timestamp
+            });
+            
+            try {
+              await wsOps.handleGmMessage(client, data);
+              console.log('GM message handled successfully');
+            } catch (err) {
+              console.error('GM message handling failed:', err);
+              wsOps.sendSystemMessage(
+                client,
+                `GM message processing failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
+                true,
+                data
+              );
+            }
             break;
 
           default:

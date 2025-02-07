@@ -200,24 +200,22 @@ export const participantsOutputMessageSchema = z.object({
     - All users in the room: gmMessageAiChatOutputSchema
   Purpose: Sent when the GM wants to send a message to all agents or all users in the room
 */
-export const gmMessageInputSchema = z.object({
-  messageType: z.literal(WsMessageTypes.GM_MESSAGE),
-  signature: z.string(),
-  sender: z.string(),
-  content: z.object({
-    gmId: z.number(),
-    timestamp: z.number(),
-    targets: z.array(z.number()), // List of agent ids to send the message to
-    roomId: z.number(),
-    roundId: z.number(),
-    message: z.string(),
-    deadline: z.number().optional(), // Time in which the Agent must respond to the GM message before slashing/kicking
-    additionalData: z.record(z.string(), z.any()).optional(),
-    ignoreErrors: z.boolean().optional().default(false), // There are a few checks that a GM can ignore, like if the round is open or not, in case of emergency
-  }),
-});
-export const gmMessageAgentOutputSchema = gmMessageInputSchema; // GM messages are passthrough to agents
-export const gmMessageAiChatOutputSchema = gmMessageInputSchema; // GM messages are passthrough to AI Chat
+// export const gmMessageInputSchema = z.object({
+//   messageType: z.literal(WsMessageTypes.GM_MESSAGE),
+//   signature: z.string(),
+//   sender: z.string(),
+//   content: z.object({
+//     gmId: z.number(),
+//     timestamp: z.number(),
+//     targets: z.array(z.number()), // List of agent ids to send the message to
+//     roomId: z.number(),
+//     roundId: z.number(),
+//     message: z.string(),
+//     deadline: z.number().optional(), // Time in which the Agent must respond to the GM message before slashing/kicking
+//     additionalData: z.record(z.string(), z.any()).optional(),
+//     ignoreErrors: z.boolean().optional().default(false), // There are a few checks that a GM can ignore, like if the round is open or not, in case of emergency
+//   }),
+// });
 
 /*
   PVP_ACTION_ENACTED MESSAGES SCHEMA:
@@ -344,6 +342,31 @@ export const messagesRestResponseSchema = z.object({
   data: z.any().optional(),
   error: z.string().optional(),
 });
+
+
+export const gmMessageInputSchema = z.object({
+  messageType: z.literal(WsMessageTypes.GM_MESSAGE),
+  signature: z.string(),
+  sender: z.string(),
+  content: z.object({
+    gmId: z.number(),
+    timestamp: z.number(),
+    roomId: z.number(),
+    roundId: z.number(),
+    // Remove or rename the extra field if needed:
+    // Either use only "message" or only "text".
+    message: z.string(),
+    targets: z.array(z.number()),
+    ignoreErrors: z.boolean().optional().default(false),
+    // <-- NEW: optional PvP action field:
+    pvpAction: pvpActionSchema.optional(),
+    deadline: z.number().optional(),
+    additionalData: z.record(z.any()).optional()
+  }),
+});
+export const gmMessageAgentOutputSchema = gmMessageInputSchema; // GM messages are passthrough to agents
+export const gmMessageAiChatOutputSchema = gmMessageInputSchema; // GM messages are passthrough to AI Chat
+
 
 export type AllOutputSchemaTypes =
   | z.infer<typeof publicChatMessageOutputSchema>

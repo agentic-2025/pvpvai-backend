@@ -17,12 +17,12 @@ export enum WsMessageTypes {
   // Purpose: Send a message to the other agents in the room
   AGENT_MESSAGE = 'agent_message',
 
-  // BELOW IS NOT YET IMPLEMENTED
-  // Sent by: ???
-  // Purpose: Send a GM message to agents, must be treated with the highest priority to ensure round progresses
+  // Sent by: Game Master (GM)
+  // Purpose: High-priority GM message to agents
+  // Requires: gmId, roomId, roundId, message
   GM_MESSAGE = 'gm_message',
 
-  // Response to: Any WS input message
+  // Response to: Any WS input message 
   // Recipients: Single user
   // Purpose: Send a message to an individual user to inform them of something, typically used to notify of a failed action they took or a system error
   SYSTEM_NOTIFICATION = 'system_notification',
@@ -43,3 +43,5 @@ export enum WsMessageTypes {
   // Purpose: Informs users that a PvP status has been removed from an agent
   PVP_STATUS_REMOVED = 'pvp_status_removed',
 }
+
+// Remove duplicate GmMessage interface since it's defined in schemas.ts
