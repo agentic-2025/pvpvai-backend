@@ -30,7 +30,7 @@ export async function checkAndCreateRounds() {
     }
 
   } catch (error) {
-    console.error('Error in checkAndCreateRounds:', error);
+    // console.error('Error in checkAndCreateRounds:', error); // TODO turn back on if needed
   }
 }
 
@@ -90,7 +90,7 @@ export async function checkAndCloseRounds() {
     }
 
   } catch (error) {
-    console.error('Error in checkAndCreateRounds:', error);
+    // console.error('Error in checkAndCreateRounds:', error); // TODO turn back on if needed
   }
 }
 

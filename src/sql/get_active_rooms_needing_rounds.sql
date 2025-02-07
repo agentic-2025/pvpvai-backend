@@ -10,17 +10,17 @@ BEGIN
                 select 1
                 from rounds
                 where rounds.room_id = rooms.id
-              --   and rounds.status = 'STARTING'
-                and rounds.active = true
+                and (
+                  rounds.active = true
+                  OR (
+                      rounds.status = 'STARTING'
+                      AND rounds.updated_at < NOW() - INTERVAL '60 seconds'
+                    )
+                )
            )
            and rooms.contract_address is not null;
-
-       --     AND (
-              --   rooms.contract_address is not null
-
-                OR (rounds.status = 'STARTING'  AND rounds.active=TRUE AND rounds.updated_at < NOW() - INTERVAL '60 seconds')
-       --      );
 END;
 $$ LANGUAGE plpgsql;
 
---  select * from get_active_rooms_needing_rounds();
+-- select * from get_active_rooms_needing_rounds();
+

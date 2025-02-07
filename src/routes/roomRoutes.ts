@@ -192,4 +192,84 @@ export async function roomRoutes(server: FastifyInstance) {
       }
     }
   );
+
+  // Get room details
+  server.get<{
+    Params: { roomId: string };
+  }>(
+    '/:roomId',
+    {
+      schema: {
+        params: {
+          type: 'object',
+          required: ['roomId'],
+          properties: {
+            roomId: { type: 'string', pattern: '^[0-9]+$' },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const roomId = parseInt(request.params.roomId);
+      const result = await roomController.findRoomById(roomId);
+      
+      if (!result.success) {
+        return reply.status(404).send({ error: result.error });
+      }
+      
+      return reply.send({
+        success: true,
+        data: result.data
+      });
+    }
+  );
+
+  // Get all rounds in a room
+  server.get<{
+    Params: { roomId: string };
+  }>(
+    '/:roomId/rounds',
+    {
+      schema: {
+        params: {
+          type: 'object',
+          required: ['roomId'],
+          properties: {
+            roomId: { type: 'string', pattern: '^[0-9]+$' },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const roomId = parseInt(request.params.roomId);
+
+      // First verify room exists
+      const roomResult = await roomController.findRoomById(roomId);
+      if (!roomResult.success) {
+        return reply.status(404).send({ error: 'Room not found' });
+      }
+
+      try {
+        const { data: rounds, error } = await supabase
+          .from('rounds')
+          .select('*')
+          .eq('room_id', roomId)
+          .order('created_at', { ascending: false });
+
+        if (error) {
+          return reply.status(500).send({ error: error.message });
+        }
+
+        return reply.send({
+          success: true,
+          data: rounds
+        });
+      } catch (error) {
+        console.error('Error fetching rounds:', error);
+        return reply.status(500).send({ 
+          error: 'Failed to fetch rounds' 
+        });
+      }
+    }
+  );
 }
