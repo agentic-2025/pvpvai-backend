@@ -76,10 +76,20 @@ export async function processAgentMessage(
       reason: roundReason,
     } = await roundAndAgentsPreflight(roundId);
 
-    const roomAgents = await roomService.getRoomAgents(roomId);
 
-    const senderAgent = roomAgents?.data?.find((a) => a.agent_id === message.content.agentId);
-    console.log(roomAgents);
+    const agentKeys = await supabase
+      .from('room_agents')
+      .select('wallet_address, agent_id, agents(eth_wallet_address)')
+      .eq('room_id', roomId);
+
+    const senderAgent = agentKeys?.data?.find((a) => {
+      return (
+        a.agent_id === message.content.agentId ||
+        a.agents.eth_wallet_address === message.sender
+      );
+    });
+
+    console.log('agentMessage signature auth valid addresses for room', agentKeys);
     if (!senderAgent?.wallet_address) {
       return {
         error: `Could not find a wallet matching the message sender, ${message.sender}, for agent ${message.content.agentId} in room_agents for room ${roomId}`,
