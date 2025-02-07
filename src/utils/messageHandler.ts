@@ -1,16 +1,16 @@
 /**
  * IMPORTANT: Message Signing Protocol
- * 
+ *
  * Only core message fields are included in signature verification:
  * - timestamp
  * - roomId
  * - roundId
  * - agentId
  * - text
- * 
+ *
  * Additional fields like 'context' and 'messageHistory' are NOT part of the signed content.
  * This ensures signature verification remains consistent even if context changes.
- * 
+ *
  * The signing process:
  * 1. Extract core fields to be signed
  * 2. Sort object keys recursively
@@ -27,7 +27,6 @@ import { Tables } from '../types/database.types';
 import { WsMessageTypes } from '../types/ws';
 import { signMessage, verifySignedMessage } from './auth';
 import {
-  agentMessageAiChatOutputSchema,
   agentMessageInputSchema,
   AllAgentChatMessageSchemaTypes,
   gmMessageAiChatOutputSchema,
@@ -36,7 +35,6 @@ import {
   observationMessageInputSchema,
 } from './schemas';
 import { roundAndAgentsPreflight } from './validation';
-import { sortObjectKeys } from './sortObjectKeys';
 
 // Add address validation helper
 function isValidEthereumAddress(address: string): boolean {
@@ -78,19 +76,22 @@ export async function processAgentMessage(
       reason: roundReason,
     } = await roundAndAgentsPreflight(roundId);
 
-
     const roomAgents = await roomService.getRoomAgents(roomId);
 
     const senderAgent = roomAgents?.data?.find((a) => a.agent_id === message.content.agentId);
+    console.log(roomAgents);
     if (!senderAgent?.wallet_address) {
       return {
-        error: `No wallet address found for agent ${message.content.agentId} in room_agents`,
+        error: `Could not find a wallet matching the message sender, ${message.sender}, for agent ${message.content.agentId} in room_agents for room ${roomId}`,
         statusCode: 400,
       };
     }
 
     // Add validation for address format
-    if (!isValidEthereumAddress(message.sender) || !isValidEthereumAddress(senderAgent.wallet_address)) {
+    if (
+      !isValidEthereumAddress(message.sender) ||
+      !isValidEthereumAddress(senderAgent.wallet_address)
+    ) {
       return {
         error: `Invalid Ethereum address format. Sender: ${message.sender}, Agent wallet: ${senderAgent.wallet_address}`,
         statusCode: 400,
@@ -101,7 +102,7 @@ export async function processAgentMessage(
     console.log('Address comparison:', {
       messageSender: message.sender,
       agentWallet: senderAgent.wallet_address,
-      agentId: message.content.agentId
+      agentId: message.content.agentId,
     });
 
     // Direct case-insensitive comparison
@@ -124,7 +125,6 @@ export async function processAgentMessage(
         statusCode: 400,
       };
     }
-
 
     const postPvpMessages: Record<number, any> = {};
     const backendSignature = await signMessage(message.content);
@@ -163,11 +163,12 @@ export async function processAgentMessage(
               .filter((a) => a.id !== message.content.agentId)
               .map((a) => a.id),
             postPvpMessages,
-            pvpStatusEffects: typeof round.pvp_status_effects === 'string' 
-              ? JSON.parse(round.pvp_status_effects)
-              : round.pvp_status_effects || {},
+            pvpStatusEffects:
+              typeof round.pvp_status_effects === 'string'
+                ? JSON.parse(round.pvp_status_effects)
+                : round.pvp_status_effects || {},
           },
-        }
+        },
       },
     });
 
@@ -181,7 +182,7 @@ export async function processAgentMessage(
     console.error('Error details:', {
       error: err,
       message: err instanceof Error ? err.message : String(err),
-      stack: err instanceof Error ? err.stack : undefined
+      stack: err instanceof Error ? err.stack : undefined,
     });
 
     if (err instanceof Error) {
@@ -247,6 +248,8 @@ export async function processObservationMessage(
     for (const agent of agents) {
       await sendMessageToAgent({ agent, message: observation });
     }
+
+    console.log('Dumping observation message', observation);
     await wsOps.broadcastToAiChat({
       roomId,
       record: {

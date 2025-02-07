@@ -3,10 +3,9 @@ import axios, { AxiosError } from 'axios';
 import { Wallet } from 'ethers';
 import { WebSocket } from 'ws';
 import { z } from 'zod';
-import { backendEthersSigningWallet, SIGNATURE_WINDOW_MS } from './config';
+import { backendEthersSigningWallet } from './config';
 import { Database } from './types/database.types';
 import { WsMessageTypes } from './types/ws';
-import { verifySignedMessage } from './utils/auth';
 import {
   agentMessageInputSchema,
   gmMessageInputSchema,
@@ -32,10 +31,10 @@ const RECONNECT_INTERVAL = 10000;
 const BAD_MESSAGE_PROBABILITY = 0.005;
 const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3000';
 
-// Message type configuration flags
+// Message type configuration flags - can be modified inline
 const MESSAGE_TYPE_CONFIG = {
-  PUBLIC_CHAT: true,
-  PARTICIPANTS: true, 
+  PUBLIC_CHAT: false,
+  PARTICIPANTS: false,
   GM_MESSAGES: true,
   AGENT_MESSAGES: true,
   OBSERVATIONS: true,
@@ -44,22 +43,28 @@ const MESSAGE_TYPE_CONFIG = {
 
 // Probability weights for enabled message types (will be normalized based on enabled types)
 const BASE_PROBABILITIES = {
-  PUBLIC_CHAT: 0.35,
-  PARTICIPANTS: 0.20,
-  GM_MESSAGES: 0.225,
-  AGENT_MESSAGES: 0.125,
-  OBSERVATIONS: 0.10,
+  PUBLIC_CHAT: 0.2,
+  PARTICIPANTS: 0.03,
+  GM_MESSAGES: 0.1,
+  AGENT_MESSAGES: 0.4,
+  OBSERVATIONS: 0.15,
 } as const;
 
 const randomDelay = () => Math.floor(Math.random() * (MAX_DELAY - MIN_DELAY + 1)) + MIN_DELAY;
 
 const keyMap: Record<string, number> = {
-  '0x9cf1FE84d1Bc056A171fd75Fe9C9789da35B1ffd': 12,
-  '0xAd6226d73C53a0F37A4F551fCc1c1F3B17dB24CA': 11,
-  '0xC333a28917644C2A75bB3A5B42D1dBB11f244E3c': 10,
-  '0xEcd63D57e0e03EeC21CC76B6F374F611260CC81D': 24,
-  '0x0C33268cBaFB2520CC01f11B2D41a5069ec20EcA': 25,
+  '0x4ffE2DF7B11ea3f28c6a7C90b39F52427c9D550d': 37,
+  '0x830598617569AfD7Ad16343f5D4a226578b16A3d': 38,
+  '0x1D5EbEABEE35dbBA6Fd2847401F979b3f6249a93': 39,
 };
+
+// Private keys corresponding to the addresses above
+const keyPool = [
+  '0x922a64dac895e4ebedd2e942060f73e85b0bda1ef7cc852c5e194629f437320a', // for 0x4ffE2DF7B11ea3f28c6a7C90b39F52427c9D550d
+  '0x3569d1263cf81e7f06dec377a41ed2bd509fe882fc170215563e347d6db752ba', // for 0x830598617569AfD7Ad16343f5D4a226578b16A3d
+  '0xb92bd0c7c141fc381efbf5381ec12f674302b3ab29382fec2a6998e073fd1b88', // for 0x1D5EbEABEE35dbBA6Fd2847401F979b3f6249a93
+];
+
 const sampleMessages = [
   'Hello everyone!',
   "How's it going?",
@@ -185,7 +190,7 @@ async function getActiveRoomAndRound() {
     `
     )
     .eq('active', true)
-    .eq('room_id', 5)
+    .eq('room_id', 15)
     .limit(1)
     .single();
 
@@ -232,29 +237,49 @@ async function signMessage(content: any): Promise<string> {
 function calculateProbabilities() {
   const enabledTypes = Object.entries(MESSAGE_TYPE_CONFIG)
     .filter(([key, enabled]) => enabled && key in BASE_PROBABILITIES)
-    .map(([key]) => key);
+    .map(([key]) => key as keyof typeof BASE_PROBABILITIES);
 
   if (enabledTypes.length === 0) {
-    console.warn('No message types enabled! Defaulting to PUBLIC_CHAT only.');
-    return { PUBLIC_CHAT: 1 };
+    console.warn('No message types enabled! Please enable at least one message type.');
+    return {};
   }
 
-  const totalWeight = enabledTypes.reduce(
-    (sum, type) => sum + (BASE_PROBABILITIES[type as keyof typeof BASE_PROBABILITIES] || 0),
-    0
-  );
+  const totalWeight = enabledTypes.reduce((sum, type) => sum + BASE_PROBABILITIES[type], 0);
 
   const normalized = {} as Record<string, number>;
   let accumulator = 0;
 
-  enabledTypes.forEach(type => {
-    const baseProb = BASE_PROBABILITIES[type as keyof typeof BASE_PROBABILITIES] || 0;
-    normalized[type] = accumulator + (baseProb / totalWeight);
+  enabledTypes.forEach((type) => {
+    normalized[type] = accumulator + BASE_PROBABILITIES[type] / totalWeight;
     accumulator = normalized[type];
   });
 
+  console.log('Enabled message types with normalized probabilities:', normalized);
   return normalized;
 }
+
+// Helper function to enable/disable message types
+function setMessageTypes(types: Partial<typeof MESSAGE_TYPE_CONFIG>) {
+  Object.assign(MESSAGE_TYPE_CONFIG, types);
+  const probabilities = calculateProbabilities();
+  console.log('Updated message types:', MESSAGE_TYPE_CONFIG);
+  console.log('New probabilities:', probabilities);
+}
+
+// Helper function to update probabilities
+function setProbabilities(probs: Partial<typeof BASE_PROBABILITIES>) {
+  Object.assign(BASE_PROBABILITIES, probs);
+  const probabilities = calculateProbabilities();
+  console.log('Updated base probabilities:', BASE_PROBABILITIES);
+  console.log('New normalized probabilities:', probabilities);
+}
+
+// Example usage:
+// To disable agent messages and observations:
+// setMessageTypes({ AGENT_MESSAGES: false, OBSERVATIONS: false });
+
+// To change probabilities:
+// setProbabilities({ PUBLIC_CHAT: 0.5, GM_MESSAGES: 0.5 });
 
 async function generateMessages() {
   const testUsers = await getTestUsers();
@@ -269,24 +294,9 @@ async function generateMessages() {
 
   function createConnection(userId: number): Connection {
     const ws = new WebSocket(WEBSOCKET_URL);
-    // Create a random wallet for this connection
-
-    const keyPool = [
-      '0x32cba915afa59d3f6081f64cfce0bed81c15f38300a4d805ecf80caa4309de88', // 0x9cf1FE84d1Bc056A171fd75Fe9C9789da35B1ffd
-      '0x4aa8fe4cc299ee31964deaf6a67eef596866969825a49104e92ed191aad4ab6b', // 0xAd6226d73C53a0F37A4F551fCc1c1F3B17dB24CA
-      '0x2b202ea4d3b7a57276bdf9574c0eb46c2de17fa3fe6d64b13a18a79847523a96', // 0xC333a28917644C2A75bB3A5B42D1dBB11f244E3c
-      '0x5b82c3f345916d77814b169d26e515a9ac215ab11ec7aa2ee70459f0fa9d8611', // 0xEcd63D57e0e03EeC21CC76B6F374F611260CC81D
-      '0x342cfd6037271050d8783cc504077c4b1e11454da8211bfb29ac0a05c9508e9d', // 0x0C33268cBaFB2520CC01f11B2D41a5069ec20EcA
-      '0x59964d0d2e42d68210d2195a529280e55ac587027fae781adcfeaf6785aec4c2', // 0x4252C0fBaB671488b3c3fC2c76D40E1BD844D1e5
-      '0xe31f34fe0eb308d05725219337ac69d1827f729e5ff36d161323a3cc9e42aeb3', // 0xf4cfbCAdB08c618bb98Fbf82090f20897473e15E
-      '0xb966644b20cfabbb7dfb5aee78e75d587eac777d63eb61516c4f56995022fe33', // 0x217978E892E62E19216129694fa439C9FA3CcAB8
-      '0xc37ec93ae0ac18806ad9d86d1b3e83324b790d67e90ec3139a56b20405472e45', // 0x5837B85d7966DEa3025f500b50dBc9BF89058005
-      '0xb92bd0c7c141fc381efbf5381ec12f674302b3ab29382fec2a6998e073fd1b88', // 0x1D5EbEABEE35dbBA6Fd2847401F979b3f6249a93
-      '0x922a64dac895e4ebedd2e942060f73e85b0bda1ef7cc852c5e194629f437320a', // 0xe35dEc6912117c165f089F1fCD3f15601B96b3Dd
-      '0x3569d1263cf81e7f06dec377a41ed2bd509fe882fc170215563e347d6db752ba', // 0xc727C64CaeB98A915C4389931086156F60b6db25
-    ];
+    // Only use the wallets we want for agent messages
     const wallet = new Wallet(keyPool[Math.floor(Math.random() * keyPool.length)]);
-    console.log(`Created wallet with this private key: ${wallet.privateKey}`);
+    console.log(`Created wallet ${wallet.address} for user ${userId}`);
 
     const connection: Connection = {
       ws,
@@ -481,44 +491,46 @@ async function generateMessages() {
             // 12.5% for agent messages
             // Agent message via POST
             try {
+              const agentId = keyMap[activeConnection.wallet.address];
+              
+              // Only proceed if we have a valid agentId
+              if (agentId === undefined) {
+                console.log(`No agentId found for wallet ${activeConnection.wallet.address}, skipping message`);
+                continue;
+              }
+
               const content = {
                 timestamp: Date.now(),
                 roomId: roomAndRound.roomId,
                 roundId: roomAndRound.roundId,
-                agentId: keyMap[activeConnection.wallet.address],
+                agentId,
                 text: getRandomAgentMessage(),
               };
-              console.log('signingWallet', activeConnection.wallet.address);
+
+              console.log('Sending agent message with content:', content);
               const signature = await activeConnection.wallet.signMessage(
                 JSON.stringify(sortObjectKeys(content))
               );
 
-              console.log('signature', signature);
-              const { signer, error: signatureError } = verifySignedMessage(
-                sortObjectKeys(content),
-                signature,
-                activeConnection.wallet.address,
-                content.timestamp,
-                SIGNATURE_WINDOW_MS
-              );
-              console.log('signature signers', signer, signatureError);
               const message: z.infer<typeof agentMessageInputSchema> = {
                 messageType: WsMessageTypes.AGENT_MESSAGE,
                 sender: activeConnection.wallet.address,
                 signature,
                 content: sortObjectKeys(content),
-              } satisfies z.infer<typeof agentMessageInputSchema>;
-              console.log('message', message);
+              };
 
               const response = await axios.post(`${API_BASE_URL}/messages/agentMessage`, message);
-
-              console.log(`User ${activeConnection.userId} sent agent message via POST:`, {
+              console.log(`Agent ${agentId} sent message:`, {
                 message,
                 response: response.data,
               });
             } catch (error) {
               if (error instanceof AxiosError) {
-                console.error('Error sending agent message via POST:', error.response?.data);
+                console.error('Error sending agent message via POST:', {
+                  status: error.response?.status,
+                  data: error.response?.data,
+                  wallet: activeConnection.wallet.address,
+                });
               } else {
                 console.error('Error sending agent message via POST:', error);
               }
@@ -532,7 +544,7 @@ async function generateMessages() {
                 ];
 
               const content = {
-                agentId: keyMap[activeConnection.wallet.address],
+                agentId: keyMap[activeConnection.wallet.address] || 57,
                 timestamp: Date.now(),
                 roomId: roomAndRound.roomId,
                 roundId: roomAndRound.roundId,
@@ -540,14 +552,17 @@ async function generateMessages() {
                 data: getRandomObservation(observationType),
               };
 
+              console.log('Sending observation message with content:', content);
+
               const signature = await activeConnection.wallet.signMessage(JSON.stringify(content));
 
               const observationMessage: z.infer<typeof observationMessageInputSchema> = {
                 messageType: 'observation',
                 sender: activeConnection.wallet.address,
                 signature,
-                content: sortObjectKeys(content) satisfies z.infer<typeof observationMessageInputSchema>,
+                content: sortObjectKeys(content),
               };
+              console.log('observationMessage', observationMessage);
 
               try {
                 const response = await axios.post(

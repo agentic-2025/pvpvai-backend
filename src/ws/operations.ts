@@ -90,6 +90,7 @@ export class WSOperations {
     // First insert the message into the database
     const { error } = await supabase.from('round_agent_messages').insert(record);
     if (error) {
+      console.error('Failed to insert message into round_agent_messages:', error);
       throw new Error('Failed to insert message into round_agent_messages: ' + error);
       // console.error('Failed to insert message into round_agent_messages:', error);
 

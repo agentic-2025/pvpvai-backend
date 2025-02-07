@@ -30,15 +30,10 @@ export async function messagesRoutes(server: FastifyInstance) {
     Reply: z.infer<typeof messagesRestResponseSchema>;
   }>(
     '/observations',
-    {
-      schema: {
-        body: {
-          type: 'object',
-          required: ['signature', 'messageType', 'sender', 'content'],
-        },
-      },
-    },
+
     async (request, reply) => {
+      console.log('Received observation message', request.body);
+
       const result = await processObservationMessage(request.body);
       return reply.status(result.statusCode).send({
         message: result.message,
