@@ -1,7 +1,7 @@
 import { config } from 'dotenv';
 import { JsonRpcProvider, Wallet } from 'ethers';
 import { type Address } from 'viem'; // keep this type if you want, or use string
-import { GameContracts } from '../lib/contractInteractions';
+import { GameContracts } from '../utils/contractInteractions';
 import { RoundState } from '../types/roomTypes';
 
 // Load environment variables
