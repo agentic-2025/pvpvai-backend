@@ -11,6 +11,14 @@ import { roundRoutes } from './routes/roundRoutes';
 import { WsMessageTypes } from './types/ws';
 import { AllInputSchemaTypes } from './utils/schemas';
 
+// Add type declaration for the custom property
+declare module 'fastify' {
+  interface FastifyRequest {
+    verifiedAddress: string;
+  }
+}
+
+
 const server = fastify({
   logger: true,
 });

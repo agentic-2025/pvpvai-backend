@@ -20,7 +20,7 @@ export type Database = {
           endpoint: string
           eth_wallet_address: string | null
           id: number
-          image_url: string | null
+          image_url: string
           last_health_check: string | null
           platform: string
           single_sentence_summary: string | null
@@ -28,6 +28,7 @@ export type Database = {
           status: string | null
           type: string
           updated_at: string
+          uuid: string | null
         }
         Insert: {
           character_card?: string | null
@@ -39,7 +40,7 @@ export type Database = {
           endpoint: string
           eth_wallet_address?: string | null
           id?: number
-          image_url?: string | null
+          image_url: string
           last_health_check?: string | null
           platform: string
           single_sentence_summary?: string | null
@@ -47,6 +48,7 @@ export type Database = {
           status?: string | null
           type?: string
           updated_at?: string
+          uuid?: string | null
         }
         Update: {
           character_card?: string | null
@@ -58,7 +60,7 @@ export type Database = {
           endpoint?: string
           eth_wallet_address?: string | null
           id?: number
-          image_url?: string | null
+          image_url?: string
           last_health_check?: string | null
           platform?: string
           single_sentence_summary?: string | null
@@ -66,6 +68,7 @@ export type Database = {
           status?: string | null
           type?: string
           updated_at?: string
+          uuid?: string | null
         }
         Relationships: [
           {
@@ -166,7 +169,6 @@ export type Database = {
           participants: number
           pvp_action_log: Json | null
           room_config: Json | null
-          round_time: number
           type_id: number
           updated_at: string
         }
@@ -186,7 +188,6 @@ export type Database = {
           participants?: number
           pvp_action_log?: Json | null
           room_config?: Json | null
-          round_time?: number
           type_id: number
           updated_at?: string
         }
@@ -206,7 +207,6 @@ export type Database = {
           participants?: number
           pvp_action_log?: Json | null
           room_config?: Json | null
-          round_time?: number
           type_id?: number
           updated_at?: string
         }
@@ -430,11 +430,11 @@ export type Database = {
           game_master_action_log: Json | null
           game_master_id: number | null
           id: number
-          outcome: Json | null
           pvp_action_log: Json | null
           pvp_status_effects: Json | null
           room_id: number
           round_config: Json | null
+          status: Database["public"]["Enums"]["round_status"]
           updated_at: string
         }
         Insert: {
@@ -443,11 +443,11 @@ export type Database = {
           game_master_action_log?: Json | null
           game_master_id?: number | null
           id?: number
-          outcome?: Json | null
           pvp_action_log?: Json | null
           pvp_status_effects?: Json | null
           room_id: number
           round_config?: Json | null
+          status?: Database["public"]["Enums"]["round_status"]
           updated_at?: string
         }
         Update: {
@@ -456,11 +456,11 @@ export type Database = {
           game_master_action_log?: Json | null
           game_master_id?: number | null
           id?: number
-          outcome?: Json | null
           pvp_action_log?: Json | null
           pvp_status_effects?: Json | null
           room_id?: number
           round_config?: Json | null
+          status?: Database["public"]["Enums"]["round_status"]
           updated_at?: string
         }
         Relationships: [
@@ -505,10 +505,51 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      create_round_from_room: {
+        Args: {
+          room_id_param: number
+        }
+        Returns: {
+          id: number
+          room_id: number
+          active: boolean
+          status: Database["public"]["Enums"]["round_status"]
+          round_config: Json
+          created_at: string
+          updated_at: string
+        }[]
+      }
+      get_active_rooms_needing_rounds: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          id: number
+          active: boolean
+          contract_address: string
+          room_config: Json
+        }[]
+      }
+      get_active_rounds_to_close: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          id: number
+          active: boolean
+          room_config: Json
+          room_id: number
+          contract_address: string
+        }[]
+      }
+      get_round_agents: {
+        Args: {
+          round_id_param: number
+        }
+        Returns: {
+          agent_id: number
+          wallet_address: string
+        }[]
+      }
     }
     Enums: {
-      [_ in never]: never
+      round_status: "STARTING" | "CLOSING" | "OPEN" | "CLOSED" | "CANCELLED"
     }
     CompositeTypes: {
       [_ in never]: never

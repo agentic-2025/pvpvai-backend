@@ -46,6 +46,10 @@ export const signatureVerificationPlugin = async (
       });
     }
 
+    // Set the verified address in the request context
+    // Consume downstream w/ const signer = request.verifiedAddress
+    request.verifiedAddress = sender;
+
     return;
   } catch (error) {
     if (error instanceof z.ZodError) {

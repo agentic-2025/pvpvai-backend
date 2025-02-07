@@ -1,6 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
-import { Wallet } from 'ethers';
+import { JsonRpcProvider, Wallet } from 'ethers';
+import { type Address } from 'viem'; // keep this type if you want, or use string
 import { Database } from './types/database.types';
+import { GameContracts } from './utils/contractInteractions';
 import { WSOperations } from './ws/operations';
 
 // Initialize Supabase client
@@ -25,3 +27,27 @@ if (!SIGNER_PRIVATE_KEY) {
 }
 
 export const backendEthersSigningWallet = new Wallet(SIGNER_PRIVATE_KEY);
+
+export let contractClient: GameContracts;
+(async () => {
+  const rawCoreAddress = process.env.APPLICATION_CONTRACT_ADDRESS;
+  // Get core contract address and ensure it's a valid address
+  if (!rawCoreAddress) {
+    console.info(
+      'APPLICATION_CONTRACT_ADDRESS not found in environment variables, cannot initialize contract client'
+    );
+    return;
+    
+  }
+  const coreAddress = rawCoreAddress as Address;
+
+  // Initialize provider and wallet
+  const provider = new JsonRpcProvider(
+    process.env.BASE_SEPOLIA_RPC_URL || 'https://sepolia.base.org'
+  );
+  contractClient = new GameContracts({
+    provider,
+    wallet: backendEthersSigningWallet,
+    coreAddress,
+  });
+})();

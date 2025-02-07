@@ -64,7 +64,8 @@ export class RoomService {
   async addAgentToRoom(
     roomId: number,
     agentId: number,
-    walletAddress: string
+    walletAddress: string,
+    walletJson: any
   ): Promise<RoomOperationResult<Database['public']['Tables']['room_agents']['Row']>> {
     try {
       const { data, error } = await supabase
@@ -73,7 +74,8 @@ export class RoomService {
           {
             room_id: roomId,
             agent_id: agentId,
-            wallet_address: walletAddress
+            wallet_address: walletAddress,
+            wallet_json: walletJson,
           },
           {
             onConflict: 'room_id,agent_id',
@@ -95,13 +97,13 @@ export class RoomService {
 
   async bulkAddAgentsToRoom(
     roomId: number,
-    agents: Array<{ id: number, walletAddress: string }>
+    agents: Array<{ id: number; walletAddress: string }>
   ): Promise<RoomOperationResult<Database['public']['Tables']['room_agents']['Row'][]>> {
     try {
       const roomAgentsData = agents.map((agent) => ({
         room_id: roomId,
         agent_id: agent.id,
-        wallet_address: agent.walletAddress
+        wallet_address: agent.walletAddress,
       }));
 
       const { data, error } = await supabase

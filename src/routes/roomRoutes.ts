@@ -1,18 +1,15 @@
+import { ethers } from 'ethers';
 import { FastifyInstance } from 'fastify';
+import { z } from 'zod';
+import { contractClient, supabase } from '../config';
 import { roomController } from '../controllers/roomController';
 import { roundController } from '../controllers/roundController';
-import {
-  agentAddSchema,
-  agentBulkAddSchema,
-  RoomAgentAdd,
-  RoomAgentBulkAdd,
-  RoomSetup,
-  roomSetupSchema,
-} from '../utils/schemas';
+import { agentAddSchema, agentBulkAddSchema, roomSetupSchema } from '../utils/schemas';
+import { chainIdToNetwork, createAndSaveWalletToFile } from '../utils/walletUtils';
 
 export async function roomRoutes(server: FastifyInstance) {
   // Setup new room
-  server.post<{ Body: RoomSetup }>(
+  server.post<{ Body: z.infer<typeof roomSetupSchema> }>(
     '/setup',
     {
       schema: {
@@ -20,18 +17,82 @@ export async function roomRoutes(server: FastifyInstance) {
       },
     },
     async (request, reply) => {
-      const result = await roomController.setupRoom(request.body);
-      if (!result.success) {
-        return reply.status(400).send({ error: result.error });
+      // TODO check that every specified agent is registered on the contract
+      // DB is a good enough source of truth for now since all create agent requests should come through POST /agents
+      const { data: agents, error: agentsError } = await supabase
+        .from('agents')
+        .select('*')
+        .in('id', request.body.content.agents);
+      if (agentsError) {
+        return reply.status(400).send({
+          error: 'Failed to create room, error fetching agents from DB: ' + agentsError.message,
+        });
       }
-      return reply.send(result.data);
+      const { data: gm, error: gmError } = await supabase
+        .from('agents')
+        .select('*')
+        .eq('id', request.body.content.gm)
+        .single();
+      if (gmError) {
+        return reply
+          .status(400)
+          .send({ error: 'Failed to create room, error fetching GM from DB: ' + gmError.message });
+      }
+
+      const newAgentWallets = [];
+      for (const agent of agents) {
+        const result = await createAndSaveWalletToFile(
+          chainIdToNetwork[request.body.content.chain_id]
+        );
+        //register agent wallet on contract
+        const tx = await contractClient.registerAgentWallet({
+          agentId: BigInt(agent.id),
+          altWallet: result.address as `0x${string}`,
+        });
+        console.log('Registered agent wallet on contract', tx);
+        newAgentWallets.push({
+          address: result.address,
+        });
+      }
+      // Create new wallets for every agent with coinbase
+      const agentWallets = await Promise.all(
+        agents.map(async (agent) => {
+          const wallet = await ethers.Wallet.createRandom();
+          return {
+            address: wallet.address,
+            privateKey: wallet.privateKey,
+          };
+        })
+      );
+
+      const roomContract = await contractClient.createRoom({
+        gameMaster: gm.eth_wallet_address as `0x${string}`,
+        creator: request.verifiedAddress as `0x${string}`,
+        tokenAddress: request.body.content.token as `0x${string}`,
+        roomAgentWallets: agents.map((agent) => agent.eth_wallet_address as `0x${string}`),
+        roomAgentFeeRecipients: agents.map((agent) => agent.eth_wallet_address as `0x${string}`),
+        roomAgentIds: agents.map((agent) => BigInt(agent.id)),
+      });
+
+      // Create room in DB
+      // const result = await roomController.setupRoom({
+      //   ...request.body.content,
+      //   creator_address: request.verifiedAddress,
+      // });
+      // Set agent wallets
+
+      // if (!result.success) {
+      //   return reply.status(400).send({ error: result.error });
+      // }
+      // return reply.send(result.data);
+      return reply.send({});
     }
   );
 
   // Add single agent to room
   server.post<{
     Params: { roomId: string };
-    Body: { agent_id: number; wallet_address: string };
+    Body: { agent_id: number; wallet_address: string; wallet_json: any };
   }>(
     '/:roomId/agents',
     {
@@ -48,7 +109,12 @@ export async function roomRoutes(server: FastifyInstance) {
     },
     async (request, reply) => {
       const roomId = parseInt(request.params.roomId);
-      const result = await roomController.addAgentToRoom(roomId, request.body.agent_id, request.body.wallet_address);
+      const result = await roomController.addAgentToRoom(
+        roomId,
+        request.body.agent_id,
+        request.body.wallet_address,
+        request.body.wallet_json
+      );
       if (!result.success) {
         return reply.status(400).send({ error: result.error });
       }
@@ -85,10 +151,10 @@ export async function roomRoutes(server: FastifyInstance) {
   );
 
   // Create a new round in a room
-  // This route is used by the GameMasterClient to create a new round in a specific room 
+  // This route is used by the GameMasterClient to create a new round in a specific room
   server.post<{
     Params: { roomId: string };
-    Body: { 
+    Body: {
       game_master_id?: number;
       round_config?: any;
     };

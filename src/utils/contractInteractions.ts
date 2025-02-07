@@ -1,5 +1,6 @@
-import { type JsonRpcProvider, type Wallet, Contract } from 'ethers';
+import { type JsonRpcProvider, type Wallet, Contract, ethers } from 'ethers';
 import { type Address } from 'viem'; // keep this type if you want, or use string
+import RoomArtifact from '../artifacts/Room.json';
 import { coreAbi, roomAbi } from '../types/contract.types';
 import { BetType, RoundState } from '../types/roomTypes';
 
@@ -18,7 +19,7 @@ export class GameContracts {
     coreAddress: Address;
   }) {
     this.provider = provider;
-    this.wallet = wallet;
+    this.wallet = wallet.connect(provider);
     this.coreAddress = coreAddress;
   }
 
@@ -30,7 +31,6 @@ export class GameContracts {
     roomAgentWallets,
     roomAgentFeeRecipients,
     roomAgentIds,
-    roomImplementation,
   }: {
     gameMaster: Address;
     creator: Address;
@@ -38,9 +38,14 @@ export class GameContracts {
     roomAgentWallets: Address[];
     roomAgentFeeRecipients: Address[];
     roomAgentIds: bigint[];
-    roomImplementation: Address;
   }): Promise<string> {
+    // Deploy a room contract
+    const factory = new ethers.ContractFactory(roomAbi, RoomArtifact.bytecode, this.wallet);
+    const roomContract = await factory.deploy();
+    const roomAddress = await roomContract.getAddress();
+    // Then register the room on the core contract
     const contract = new Contract(this.coreAddress, coreAbi, this.wallet);
+
     const tx = await contract.createRoom(
       gameMaster,
       creator,
@@ -48,8 +53,35 @@ export class GameContracts {
       roomAgentWallets,
       roomAgentFeeRecipients,
       roomAgentIds,
-      roomImplementation
+      roomAddress
     );
+    await tx.wait();
+    return tx.hash;
+  }
+
+  async createAgent({ creator, agentId }: { creator: Address; agentId: bigint }): Promise<string> {
+    const contract = new Contract(this.coreAddress, coreAbi, this.wallet);
+    console.log('Creating agent with creator:', creator, 'and agentId:', agentId);
+
+    try {
+      const tx = await contract.createAgent(creator, agentId);
+      const receipt = await tx.wait();
+      return receipt.hash;
+    } catch (error) {
+      console.error('Error creating agent:', error);
+      throw error;
+    }
+  }
+
+  async registerAgentWallet({
+    agentId,
+    altWallet,
+  }: {
+    agentId: bigint;
+    altWallet: Address;
+  }): Promise<string> {
+    const contract = new Contract(this.coreAddress, coreAbi, this.wallet);
+    const tx = await contract.registerAgentWallet(agentId, altWallet);
     await tx.wait();
     return tx.hash;
   }
@@ -164,5 +196,17 @@ const betHash = await gameContracts.placeBet({
 // Start a round
 const roundHash = await gameContracts.startRound({
   roomAddress: '0x...',
+})
+
+// Create an agent
+const createAgentTx = await gameContracts.createAgent({
+  creator: '0x...',
+  agentId: 1n,
+})
+
+// Register an alternate wallet for the agent
+const registerWalletTx = await gameContracts.registerAgentWallet({
+  agentId: 1n,
+  altWallet: '0x...',
 })
 */

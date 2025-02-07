@@ -1,20 +1,7 @@
 // src/rooms/types/roomTypes.ts
 import { Database } from './database.types';
 
-export interface RoomSetupData {
-  name: string;
-  room_type: string;
-  color?: string;
-  image_url?: string;
-  token: string;
-  token_webhook: string;
-  agents: Record<string, { wallet: string; webhook: string }>;
-  gm: string;
-  chain_id: string;
-  chain_family: string;
-  room_config: any;
-  transaction_hash: string;
-}
+
 
 export interface RoomResponse {
   success: boolean;
@@ -55,3 +42,16 @@ export interface RoomOperationResult<T = any> {
 export type DBRoom = Database['public']['Tables']['rooms']['Row'];
 export type DBRoomInsert = Database['public']['Tables']['rooms']['Insert'];
 export type DBRoomAgent = Database['public']['Tables']['room_agents']['Row'];
+
+export enum BetType {
+  Buy = 0,
+  Hold = 1,
+  Sell = 2,
+}
+
+export enum RoundState {
+  None = 0,
+  Active = 1,
+  Processing = 2,
+  Closed = 3,
+}

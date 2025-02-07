@@ -42,6 +42,16 @@ export enum WsMessageTypes {
   // Recipients: Users
   // Purpose: Informs users that a PvP status has been removed from an agent
   PVP_STATUS_REMOVED = 'pvp_status_removed',
+
+  // Response to: POST request to /agents
+  // Recipients: N/A
+  // Purpose: Not sent by anyone, just the type used for the payload of the request to POST /agents
+  CREATE_AGENT = 'create_agent',
+
+  // Response to: POST request to /rooms
+  // Recipients: N/A
+  // Purpose: Not sent by anyone, just the type used for the payload of the request to POST /rooms
+  CREATE_ROOM = 'create_room',
 }
 
 export interface AuthenticatedMessage {
