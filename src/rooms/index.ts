@@ -1,7 +1,6 @@
-import { FastifyInstance, FastifyServerOptions } from 'fastify';
-import { messagesRoutes } from '../routes/messageRoutes';
+import { FastifyInstance } from 'fastify';
+import { roomController } from '../controllers/roomController';
 import { roomRoutes } from '../routes/roomRoutes';
-import { roundRoutes } from '../routes/roundRoutes';
 
 // Export room types
 export * from '../types/roomTypes';
@@ -17,15 +16,8 @@ export {
 
 // Main routes registration
 export default async function registerRoomRoutes(
-  server: FastifyInstance,
-  options: FastifyServerOptions
+  server: FastifyInstance
 ) {
-  // Register room routes
+  // Remove duplicate route registrations and use the routes from roomRoutes instead
   await roomRoutes(server);
-
-  // Register round routes
-  await roundRoutes(server);
-
-  // Register observation routes
-  await messagesRoutes(server);
 }

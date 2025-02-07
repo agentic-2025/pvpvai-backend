@@ -182,6 +182,85 @@ export class RoundController {
   }
 
   /**
+   * Gets current round state including message history, active effects, and agent details
+   */
+  async getRoundStateWithAgents(roundId: number): Promise<RoomOperationResult<{
+    round: any;
+    agents: any[];
+    messageHistory: any[];
+    activePvPEffects: PvPEffect[];
+    phase: string;
+  }>> {
+    try {
+      // Check if round exists first
+      const { data: roundExists, error: roundCheckError } = await supabase
+        .from('rounds')
+        .select('id')
+        .eq('id', roundId);
+
+      if (roundCheckError || !roundExists?.length) {
+        return {
+          success: false,
+          error: 'Round not found'
+        };
+      }
+
+      // Get basic round state
+      const roundState = await this.getRoundState(roundId);
+      if (!roundState.success) {
+        return {
+          success: false,
+          error: roundState.error
+        };
+      }
+
+      // Get round details with agents
+      const { data: round, error } = await supabase
+        .from('rounds')
+        .select(`
+          *,
+          round_agents!round_id(
+            agent_id,
+            type
+          )
+        `)
+        .eq('id', roundId)
+        .single();
+
+      if (error) {
+        return { 
+          success: false, 
+          error: error.message 
+        };
+      }
+
+      // Get all agent details
+      const agentIds = round.round_agents?.map((ra: any) => ra.agent_id) || [];
+      const { data: agents } = await supabase
+        .from('agents')
+        .select('*')
+        .in('id', agentIds);
+
+      return {
+        success: true,
+        data: {
+          round,
+          agents: agents || [],
+          messageHistory: roundState.data?.messageHistory || [],
+          activePvPEffects: roundState.data?.activePvPEffects || [],
+          phase: roundState.data?.phase || 'discussion'
+        }
+      };
+    } catch (error) {
+      console.error('Error getting round state with agents:', error);
+      return { 
+        success: false, 
+        error: 'Failed to get round state with agents' 
+      };
+    }
+  }
+
+  /**
    * Removes expired PvP effects for a round
    */
   private cleanExpiredEffects(roundId: number): void {
@@ -251,6 +330,46 @@ export class RoundController {
     } catch (error) {
       console.error('Error getting round:', error);
       return { success: false, error: 'Failed to get round' };
+    }
+  }
+
+  async processGmMessage(message: any): Promise<{
+    success: boolean;
+    error?: string;
+    statusCode: number;
+  }> {
+    try {
+      const { roundId } = message.content;
+      
+      // Validate round exists
+      const { data: round } = await supabase
+        .from('rounds')
+        .select('*')
+        .eq('id', roundId)
+        .single();
+
+      if (!round) {
+        return {
+          success: false,
+          error: 'Round not found',
+          statusCode: 404
+        };
+      }
+
+      // Proceed with GM message processing
+      // ...rest of GM message handling...
+
+      return {
+        success: true,
+        statusCode: 200
+      };
+    } catch (error) {
+      console.error('Error processing GM message:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        statusCode: 500
+      };
     }
   }
 }

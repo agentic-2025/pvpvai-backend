@@ -1,6 +1,6 @@
 import { supabase } from '../config';
+import { DBRoomAgent, RoomOperationResult } from '../types/roomTypes';
 import { Database, Tables } from '../types/database.types';
-import { RoomOperationResult } from '../types/roomTypes';
 
 export class RoomService {
   async isAgentInRoom(roomId: number, agentId: number): Promise<RoomOperationResult<boolean>> {
@@ -89,8 +89,8 @@ export class RoomService {
       }
 
       return { success: true, data };
-    } catch (err) {
-      console.error('Error adding agent to room:', err);
+    } catch (error) {
+      console.error('Error adding agent to room:', error);
       return { success: false, error: 'Failed to add agent to room' };
     }
   }
@@ -124,16 +124,53 @@ export class RoomService {
     }
   }
 
-  async getRoomAgents(roomId: number): Promise<RoomOperationResult<Tables<'room_agents'>[]>> {
+  async getRoomAgents(roomId: number): Promise<RoomOperationResult<DBRoomAgent[]>> {
     try {
-      const { data, error } = await supabase.from('room_agents').select('*').eq('room_id', roomId);
+      const { data, error } = await supabase
+        .from('room_agents')
+        .select('*')
+        .eq('room_id', roomId);
+
       if (error) {
         return { success: false, error: error.message };
       }
+
       return { success: true, data };
-    } catch (err) {
-      console.error('Error getting room agents:', err);
+    } catch (error) {
+      console.error('Error getting room agents:', error);
       return { success: false, error: 'Failed to get room agents' };
+    }
+  }
+
+  async updateAgentInRoom(
+    roomId: number,
+    agentId: number,
+    walletAddress: string,
+    endpoint?: string
+  ): Promise<RoomOperationResult<DBRoomAgent>> {
+    try {
+      const { data, error } = await supabase
+        .from('room_agents')
+        .update({
+          wallet_address: walletAddress,
+          endpoint: endpoint
+        })
+        .eq('room_id', roomId)
+        .eq('agent_id', agentId)
+        .select()
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') { // No rows updated
+          return { success: false, error: 'Agent not found in room' };
+        }
+        return { success: false, error: error.message };
+      }
+
+      return { success: true, data };
+    } catch (error) {
+      console.error('Error updating agent in room:', error);
+      return { success: false, error: 'Failed to update agent in room' };
     }
   }
 }

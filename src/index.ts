@@ -24,51 +24,42 @@ declare module 'fastify' {
 const server = fastify({
   logger: true,
 });
+
+// Register core plugins
 server.register(cors, {
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'HEAD', 'PATCH'],
   origin: '*',
 });
-
-// Register Zod validation
 server.register(zodSchemaPlugin);
-
-// Register WebSocket support
 server.register(websocket);
 
-server.register(agentRoutes, { prefix: '/agents' });
-server.register(roomsRoutes, { prefix: '/rooms' });
-server.register(messagesRoutes, { prefix: '/messages' });
-server.register(roundRoutes, { prefix: '/rounds' });
-
-// Register routes
-
-// Instead of registering the middleware globally, apply it directly to the protected route
-server.post(
-  '/protected-hello',
-  {
+// Register all routes with proper organization
+server.register(async function(fastify) {
+  // Base routes
+  fastify.get('/', async () => ({ hello: 'world' }));
+  fastify.get('/ping', async () => 'pong\n');
+  
+  // Protected route example
+  fastify.post('/protected-hello', {
     preHandler: signatureVerificationPlugin,
-  },
-  async (request, reply) => {
+  }, async (request, reply) => {
     const body = request.body as any;
     return {
       message: 'Hello, verified user!',
       account: body.account,
       data: body.data,
     };
-  }
-);
+  });
 
-// Regular HTTP routes
-server.get('/', async (request, reply) => {
-  return { hello: 'world' };
+  // Fix: Update route registration to avoid conflicts
+  fastify.register(roomsRoutes, { prefix: '/rooms' });                  // Handles /rooms/
+  fastify.register(agentRoutes, { prefix: '/agents' });               // Handles /agents/
+  fastify.register(messagesRoutes, { prefix: '/messages' });          // Handles /messages/
+  fastify.register(roundRoutes, { prefix: '/rooms/:roomId/rounds' }); // Handles /rooms/:roomId/rounds/*
 });
 
-server.get('/ping', async (request, reply) => {
-  return 'pong\n';
-});
-
-// WebSocket route
-server.register(async function (fastify) {
+// Register WebSocket handler
+server.register(async function(fastify) {
   fastify.get('/ws', { websocket: true }, (connection, req) => {
     const client = connection;
 

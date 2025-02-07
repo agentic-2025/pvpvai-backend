@@ -22,9 +22,59 @@ import {
   RoundOutcome,
 } from '../utils/schemas';
 import { PvpActions } from '../types/pvp';
+import { supabase } from '../config';
 
 
 export async function roundRoutes(server: FastifyInstance) {
+
+  // Add to roundRoutes.ts
+server.get<{
+  Params: { roomId: string };
+}>(
+  '/active',
+  {
+    schema: {
+      params: {
+        type: 'object',
+        required: ['roomId'],
+        properties: {
+          roomId: { type: 'string', pattern: '^[0-9]+$' }
+        }
+      }
+    }
+  },
+  async (request, reply) => {
+    const roomId = parseInt(request.params.roomId);
+
+    try {
+      const { data: activeRound, error } = await supabase
+        .from('rounds')
+        .select('*')
+        .eq('room_id', roomId)
+        .eq('active', true)
+        .single();
+
+      if (error) {
+        console.error('Active round fetch error:', error);
+        return reply.status(404).send({
+          success: false, 
+          error: 'No active round found for this room'
+        });
+      }
+
+      return reply.send({
+        success: true,
+        data: activeRound
+      });
+    } catch (error) {
+      console.error('Error fetching active round:', error);
+      return reply.status(500).send({
+        success: false,
+        error: 'Failed to fetch active round'
+      });
+    }
+  }
+);
 
   /**
    * Kick Participant Endpoint
@@ -136,53 +186,6 @@ export async function roundRoutes(server: FastifyInstance) {
   );
 
   /**
-   * Get Round State Endpoint
-   * Returns current round status including:
-   * - Message history
-   * - Active PvP effects
-   * - Current phase
-   */
-  server.get<{
-    Params: { roundId: string };
-  }>(
-    '/:roundId/state',
-    {
-      schema: {
-        params: {
-          type: 'object',
-          required: ['roundId'],
-          properties: {
-            roundId: { type: 'string', pattern: '^[0-9]+$' }
-          }
-        }
-      }
-    },
-    async (request, reply) => {
-      const roundId = parseInt(request.params.roundId);
-      
-      try {
-        const result = await roundController.getRoundState(roundId);
-        if (!result.success) {
-          return reply.status(400).send({ error: result.error });
-        }
-        return reply.send({ 
-          success: true, 
-          data: {
-            messageHistory: result.data?.messageHistory ?? [],
-            activePvPEffects: result.data?.activePvPEffects ?? [],
-            phase: result.data?.phase ?? 'discussion'
-          }
-        });
-      } catch (error) {
-        request.log.error('Error getting round state:', error);
-        return reply.status(500).send({ 
-          error: 'Internal server error getting round state' 
-        });
-      }
-    }
-  );
-
-  /**
    * Remove PvP Effect Endpoint
    * Manually cancels an active PvP effect before expiration
    */
@@ -221,6 +224,83 @@ export async function roundRoutes(server: FastifyInstance) {
         request.log.error('Error removing PvP effect:', error);
         return reply.status(500).send({ 
           error: 'Internal server error removing PvP effect' 
+        });
+      }
+    }
+  );
+
+  // Fix: Support both roomId and roundId parameters
+  server.get<{
+    Params: { 
+      roomId: string;
+      roundId: string;
+    };
+    Querystring: {
+      detail?: 'full' | 'state';
+    };
+  }>(
+    '/:roundId',
+    {
+      schema: {
+        params: {
+          type: 'object',
+          required: ['roomId', 'roundId'],
+          properties: {
+            roomId: { type: 'string', pattern: '^[0-9]+$' },
+            roundId: { type: 'string', pattern: '^[0-9]+$' }
+          }
+        },
+        querystring: {
+          type: 'object',
+          properties: {
+            detail: { type: 'string', enum: ['full', 'state'] }
+          }
+        }
+      }
+    },
+    async (request, reply) => {
+      const roundId = parseInt(request.params.roundId);
+      const roomId = parseInt(request.params.roomId);
+      const { detail } = request.query;
+
+      console.log(`Processing round request - Room: ${roomId}, Round: ${roundId}, Detail: ${detail}`);
+
+      try {
+        // If detail=state, return round state
+        if (detail === 'state') {
+          console.log(`Getting round state for Round ${roundId} in Room ${roomId}`);
+          const result = await roundController.getRoundStateWithAgents(roundId);
+          if (!result.success) {
+            console.error('Round state error:', result.error);
+            return reply.status(404).send({ error: result.error });
+          }
+          return reply.send(result);
+        }
+
+        // Otherwise return basic round info with validation
+        console.log(`Getting basic round info for Round ${roundId} in Room ${roomId}`);
+        const { data: round, error } = await supabase
+          .from('rounds')
+          .select('*')
+          .eq('id', roundId)
+          .eq('room_id', roomId) // Add room validation
+          .single();
+
+        if (error) {
+          console.error('Round fetch error:', error);
+          return reply.status(404).send({ 
+            error: 'Round not found or does not belong to specified room' 
+          });
+        }
+
+        return reply.send({
+          success: true,
+          data: round
+        });
+      } catch (error) {
+        console.error('Error fetching round:', error);
+        return reply.status(500).send({ 
+          error: 'Failed to fetch round details' 
         });
       }
     }
