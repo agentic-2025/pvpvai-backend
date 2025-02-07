@@ -20,6 +20,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- select * from get_active_rounds_to_close();
--- update rounds set status = 'OPEN' where room_id = 15 and active = true;
+--  select * from get_active_rounds_to_close();
+-- update rounds set status = 'OPEN', active = true where id = 448;
 -- select * from rounds where room_id = 15 and active = true;
