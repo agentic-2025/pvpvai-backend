@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { agentMessageInputSchema } from '../utils/schemas';
 
-// Extend the base message content type with context
+// TEMP
 export interface MessageWithContext {
   timestamp: number;
   roomId: number;
