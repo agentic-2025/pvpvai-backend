@@ -10,11 +10,11 @@ BEGIN
             inner join rooms on rooms.id = rounds.room_id
 
     WHERE   rounds.active = true
-            AND (
+            and (
               rounds.status = 'OPEN' and NOW() > (rounds.created_At + (rounds.round_config->>'round_duration')::interval)
-              
-            ) 
-            -- OR (rounds.status = 'CLOSING'  AND rounds.updated_at < NOW() - INTERVAL '60 seconds');
+              OR
+              (rounds.status = 'CLOSING'  AND rounds.updated_at < NOW() - INTERVAL '60 seconds')
+            );
 END;
 $$ LANGUAGE plpgsql;
 
