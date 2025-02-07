@@ -5,11 +5,9 @@
 // POST requests here should all implement the signatureAuth middleware to verify the message is coming from an authorized source.
 // /messages/observations: Was previously /observations
 // /messages/agentMessage: Was previously /rooms/:roomId/rounds/:roundId/aiChat
-
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { messageController } from '../controllers/messageController';
-import { processGmMessage, processObservationMessage } from '../utils/messageHandler';
+import { processAgentMessage, processGmMessage, processObservationMessage } from '../utils/messageHandler';
 import {
   agentMessageInputSchema,
   gmMessageInputSchema,
@@ -17,12 +15,53 @@ import {
   observationMessageInputSchema,
 } from '../utils/schemas';
 import { supabase } from '../config';
-
-// Observations are currently passthrough to participants, so there's no distinction between input and output
-export const observationMessageOutputSchema = observationMessageInputSchema;
+import { signatureVerificationMiddleware } from '../middleware/signatureVerification';
 
 export async function messagesRoutes(server: FastifyInstance) {
-  // Legacy routes using messageHandler
+  // Register signature verification middleware
+  await signatureVerificationMiddleware(server);
+
+  // Agent Message Route
+  server.post<{
+    Body: z.infer<typeof agentMessageInputSchema>;
+    Reply: z.infer<typeof messagesRestResponseSchema>;
+  }>(
+    '/agentMessage',
+    {
+      schema: {
+        body: {
+          type: 'object',
+          required: ['signature', 'messageType', 'sender', 'content'],
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const { error } = agentMessageInputSchema.safeParse(request.body);
+        if (error) {
+          return reply.status(400).send({
+            message: 'Invalid agent message format',
+            error: error.message
+          });
+        }
+
+        const result = await processAgentMessage(request.body);
+        return reply.status(result.statusCode).send({
+          message: result.message,
+          data: result.data,
+          error: result.error
+        });
+      } catch (error) {
+        console.error('Error in agent message route:', error);
+        return reply.status(500).send({
+          message: 'Internal server error processing agent message',
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
+      }
+    }
+  );
+
+  // Observation Message Route
   server.post<{
     Body: z.infer<typeof observationMessageInputSchema>;
     Reply: z.infer<typeof messagesRestResponseSchema>;
@@ -46,39 +85,7 @@ export async function messagesRoutes(server: FastifyInstance) {
     }
   );
 
-  // New route using messageController with PvP and context support
-  server.post<{
-    Body: z.infer<typeof agentMessageInputSchema>;
-    Reply: z.infer<typeof messagesRestResponseSchema>;
-  }>(
-    '/agentMessage',
-    {
-      schema: {
-        body: {
-          type: 'object',
-          required: ['signature', 'messageType', 'sender', 'content'],
-        },
-      },
-    },
-    async (request, reply) => {
-      const { data, error } = agentMessageInputSchema.safeParse(request.body);
-      if (error) {
-        return reply.status(400).send({
-          message: 'Invalid agent message',
-          error: error.message,
-        });
-      }
-      
-      const result = await messageController.handleAgentMessage(data);
-      return reply.status(result.statusCode).send({
-        message: result.message,
-        data: result.data,
-        error: result.error?.toString(),
-      });
-    }
-  );
-
-  // Legacy GM route
+  // GM Message Route
   server.post<{
     Body: z.infer<typeof gmMessageInputSchema>;
     Reply: z.infer<typeof messagesRestResponseSchema>;
@@ -95,19 +102,11 @@ export async function messagesRoutes(server: FastifyInstance) {
     async (request, reply) => {
       try {
         const result = await processGmMessage(request.body);
-        
-        // Handle based on status code
-        if (result.statusCode === 200) {
-          return reply.status(200).send({
-            message: 'GM Message processed successfully',
-          });
-        }
-
         return reply.status(result.statusCode).send({
-          message: 'GM Message processing failed',
+          message: result.message || 'GM Message processed successfully',
+          data: result.data,
           error: result.error
         });
-
       } catch (error) {
         console.error('Error in GM message route:', error);
         return reply.status(500).send({
@@ -118,8 +117,8 @@ export async function messagesRoutes(server: FastifyInstance) {
     }
   );
 
-  // Add route for fetching round messages with pagination
-  server.get<{
+        // Query messages for the round with pagination
+        server.get<{
     Params: { roundId: string };
     Querystring: { limit?: string };
     Reply: { 
@@ -151,7 +150,6 @@ export async function messagesRoutes(server: FastifyInstance) {
       const limit = request.query.limit ? parseInt(request.query.limit) : 50;
 
       try {
-        // Query messages for the round with pagination
         const { data: messages, error } = await supabase
           .from('round_agent_messages')
           .select(`
@@ -179,7 +177,6 @@ export async function messagesRoutes(server: FastifyInstance) {
           success: true,
           data: messages
         });
-
       } catch (error) {
         console.error('Error in round messages route:', error);
         return reply.status(500).send({ 

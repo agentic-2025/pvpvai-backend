@@ -27,6 +27,7 @@ import { supabase } from '../config';
 
 export async function roundRoutes(server: FastifyInstance) {
 
+  // Add to roundRoutes.ts
 server.get<{
   Params: { roomId: string };
 }>(
