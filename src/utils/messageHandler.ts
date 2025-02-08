@@ -33,8 +33,10 @@ import {
   gmMessageInputSchema,
   observationMessageAiChatOutputSchema,
   observationMessageInputSchema,
+  pvpActionEnactedAiChatOutputSchema
 } from './schemas';
 import { roundAndAgentsPreflight } from './validation';
+import { PvpActions, PvpActionCategories } from '../types/pvp';
 
 // Add address validation helper
 function isValidEthereumAddress(address: string): boolean {
@@ -491,4 +493,69 @@ export async function sendMessageToAgent(params: {
       statusCode: 500,
     };
   }
+}
+
+export async function processContractEvent(contractAddress: string, agentAddress: string, endTime: number, parameters: any) {
+  console.log("Processing contract event:", event);
+  const { data: room, error } = await supabase
+  .from('rooms')
+  .select('*, rounds(*)')
+  .eq('contract_address', contractAddress)
+  .eq('rounds.active', true)
+  .single();
+
+  if (error) {
+    console.error('Error getting room:', error);
+    return;
+  }
+
+  const { data: agent, error: agentError } = await supabase
+  .from('room_agents')
+  .select('*')
+  .eq('wallet_address', agentAddress)
+  .single();
+
+  if (agentError) {
+    console.error('Error getting agent:', agentError);
+    return;
+  }
+
+  const roomId = room.id;
+  const roundId = room.rounds[0].id;
+
+      // Broadcast to all players in the room
+  const data = {
+    messageType: WsMessageTypes.PVP_ACTION_ENACTED,
+    signature: "",
+    sender: "",
+    content: {
+      timestamp: 0,
+      roomId,
+      roundId,
+      instigator: 0,
+      instigatorAddress: "",
+      txHash: "",
+      fee: 0,
+      action: {
+        actionType: PvpActions.ATTACK,
+        actionCategory: PvpActionCategories.DIRECT_ACTION,
+        parameters: {
+          message: "",
+          target: 0,
+        },
+      },
+    },
+  } satisfies z.infer<typeof pvpActionEnactedAiChatOutputSchema>;
+
+  await wsOps.broadcastToAiChat({
+    roomId,
+    record:  {
+      agent_id: agent.id,
+      original_author: agent.id, //TODO: Is this correct?
+      round_id: roundId,
+      pvp_status_effects: {},
+      message_type: WsMessageTypes.PVP_ACTION_ENACTED,
+      message: data,
+    },
+  });
 }
