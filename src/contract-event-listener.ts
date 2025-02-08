@@ -1,7 +1,19 @@
 // import { roundService } from '../services/roundService';
 import { ethers } from 'ethers';
+import { supabase } from './config';
 import { roomAbi } from './types/contract.types';
+import { PvpActionCategories, PvpActions } from './types/pvp';
+import { WsMessageTypes } from './types/ws';
+import {
+  PvpAllPvpActionsType,
+  attackActionSchema,
+  deafenStatusSchema,
+  poisonStatusSchema,
+  silenceStatusSchema,
+} from './utils/schemas';
+import { wsOps } from './ws/operations';
 
+import axios from 'axios';
 console.log('Starting contract event listener');
 
 // Base Sepolia RPC URL (Use Alchemy, Infura, or Public RPC)
@@ -11,6 +23,43 @@ console.log('Starting contract event listener');
 // Helper function to compute the hash of an indexed string
 function getIndexedStringHash(str: string): string {
   return ethers.keccak256(ethers.toUtf8Bytes(str));
+}
+
+function hexToString(hex: string): string {
+  // Remove '0x' prefix if present
+  const cleanHex = hex.startsWith('0x') ? hex.slice(2) : hex;
+  // Convert hex to buffer then to string
+  return Buffer.from(cleanHex, 'hex').toString('utf8');
+}
+
+function decodeParameters(verb: string, parametersHex: string): any {
+  try {
+    const parametersStr = hexToString(parametersHex);
+    const rawParameters = JSON.parse(parametersStr);
+
+    // Convert scientific notation or large numbers to proper address format if it's a target
+    if (rawParameters.target) {
+      // Ensure target is treated as a hex string address
+      rawParameters.target = ethers.getAddress(rawParameters.target.toString(16));
+    }
+
+    // Validate parameters based on verb type
+    switch (verb.toUpperCase()) {
+      case PvpActions.ATTACK:
+        return attackActionSchema.shape.parameters.parse(rawParameters);
+      case PvpActions.SILENCE:
+        return silenceStatusSchema.shape.parameters.parse(rawParameters);
+      case PvpActions.DEAFEN:
+        return deafenStatusSchema.shape.parameters.parse(rawParameters);
+      case PvpActions.POISON:
+        return poisonStatusSchema.shape.parameters.parse(rawParameters);
+      default:
+        throw new Error(`Unknown verb type: ${verb}`);
+    }
+  } catch (error) {
+    console.error('Error decoding parameters:', error);
+    return null;
+  }
 }
 
 export function startContractEventListener() {
@@ -34,39 +83,73 @@ export function startContractEventListener() {
 
   contract.on(
     'PvpActionInvoked',
-    (verbHash: any, address: string, endTime: number, parameters: any, event: any) => {
+    async (verbHash: any, address: string, endTime: number, parameters: any, event: any) => {
       console.log('\n=== PvpActionInvoked Event Details ===');
 
-      // Log the decoded parameters
-      console.log('\nDecoded Parameters:');
-      console.log('- Verb Hash:', verbHash.hash);
+      // Decode the verb
       const verb = verbHashToString[verbHash.hash];
-      console.log('- Verb: ', verb);
+      if (!verb) {
+        console.error('Unknown verb hash:', verbHash.hash);
+        return;
+      }
+
+      // Decode the parameters
+      const decodedParameters = decodeParameters(verb, parameters);
+      if (!decodedParameters) {
+        console.error('Failed to decode parameters');
+        return;
+      }
+
+      // Create a structured object matching your schema types
+      const pvpAction = {
+        // @ts-ignore-next-line
+        actionType: verb.toUpperCase() as PvpActions,
+        actionCategory:
+          verb === PvpActions.ATTACK
+            ? PvpActionCategories.DIRECT_ACTION
+            : PvpActionCategories.STATUS_EFFECT,
+        parameters: decodedParameters,
+      } satisfies PvpAllPvpActionsType;
+
+      // Log the decoded data
+      console.log('\nDecoded Data:');
+      console.log('- Verb:', verb);
       console.log('- Address:', address);
       console.log('- End Time:', endTime);
-      console.log('- Parameters:', parameters);
+      console.log('- Decoded Parameters:', decodedParameters);
+      console.log('\nStructured PVP Action:', pvpAction);
 
-      // Log the raw event data
-      console.log('\nRaw Event Data:');
-      console.log('- Block Number:', event.blockNumber);
-      console.log('- Transaction Hash:', event.transactionHash);
-      console.log('- Block Hash:', event.blockHash);
-      console.log('- Log Index:', event.logIndex);
-      console.log('- Event Name:', event.eventName);
-      console.log('- Topics:', event.topics);
-      console.log('- Data:', event.data);
+      const pvpActionMessage = {
+        messageType: WsMessageTypes.PVP_ACTION_ENACTED,
+        sender: address,
+        content: pvpAction,
+      };
 
-      // If you want to see the entire event object
-      console.log('\nComplete Event Object:');
-      console.log(JSON.stringify(event, null, 2));
+      const { data: round, error: roundError } = await supabase
+        .from('rounds')
+        .select('id')
+        .eq('room_id', 15)
+        .eq('status', 'OPEN')
+        .single();
 
-      // If there are any args in event.args, log them
-      if (event.args) {
-        console.log('\nEvent Arguments:');
-        for (let i = 0; i < event.args.length; i++) {
-          console.log(`Arg ${i}:`, event.args[i]?.toString());
+      if (roundError) {
+        if (roundError.code === 'PGRST106') {
+          console.error('No open round found for room 15, skipping pvp notification');
+          return;
         }
+        console.error('Error fetching round:', roundError);
+        return;
       }
+
+      await wsOps.broadcastToAiChat({
+        roomId: 15,
+        record: {
+          ...pvpActionMessage,
+          agent_id: 57,
+          message: pvpActionMessage,
+          round_id: round.id, //TODO hardcoding so bad, feels so bad, profound sadness
+        },
+      });
     }
   );
 }

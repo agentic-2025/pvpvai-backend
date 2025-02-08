@@ -120,15 +120,20 @@ export const agentMessageInputSchema = z.object({
     roundId: z.number(),
     agentId: z.number(),
     text: z.string(),
-    context: z.array(z.object({ // added optional
-      id: z.number(),
-      message: z.any(),
-      message_type: z.string(),
-      created_at: z.string(),
-      agent_id: z.number(),
-      original_author: z.number(),
-      pvp_status_effects: z.record(z.string(), z.any())
-    })).optional()
+    context: z
+      .array(
+        z.object({
+          // added optional
+          id: z.number(),
+          message: z.any(),
+          message_type: z.string(),
+          created_at: z.string(),
+          agent_id: z.number(),
+          original_author: z.number(),
+          pvp_status_effects: z.record(z.string(), z.any()),
+        })
+      )
+      .optional(),
   }),
 });
 
@@ -240,10 +245,10 @@ export const gmMessageAiChatOutputSchema = gmMessageInputSchema; // GM messages 
   - After the user has finished their wallet interaction, they may eagerly send a message to the backend saying they placed the transaction.
   - The backend can then echo the message to that user individually so the user gets early feedback when they took an action
  */
-const durationOptionsSchema = z.union([z.literal(5), z.literal(10), z.literal(30)]);
+export const durationOptionsSchema = z.union([z.literal(5), z.literal(10), z.literal(30)]);
 
 // Create schemas for each PvP action type
-const amnesiaActionSchema = z.object({
+export const amnesiaActionSchema = z.object({
   actionType: z.literal(PvpActions.AMNESIA),
   actionCategory: z.literal(PvpActionCategories.DIRECT_ACTION),
   parameters: z.object({
@@ -251,57 +256,57 @@ const amnesiaActionSchema = z.object({
   }),
 });
 
-const attackActionSchema = z.object({
+export const attackActionSchema = z.object({
   actionType: z.literal(PvpActions.ATTACK),
   actionCategory: z.literal(PvpActionCategories.DIRECT_ACTION),
   parameters: z.object({
-    target: z.number(),
+    target: z.string(),
     message: z.string(),
   }),
 });
 
-const deceiveStatusSchema = z.object({
+export const deceiveStatusSchema = z.object({
   actionType: z.literal(PvpActions.DECEIVE),
   actionCategory: z.literal(PvpActionCategories.STATUS_EFFECT),
   parameters: z.object({
-    target: z.number(),
+    target: z.string(),
     duration: durationOptionsSchema,
     newPersona: z.string(),
   }),
 });
 
-const blindStatusSchema = z.object({
+export const blindStatusSchema = z.object({
   actionType: z.literal(PvpActions.BLIND),
   actionCategory: z.literal(PvpActionCategories.STATUS_EFFECT),
   parameters: z.object({
-    target: z.number(),
+    target: z.string(),
     duration: durationOptionsSchema,
   }),
 });
 
-const silenceStatusSchema = z.object({
+export const silenceStatusSchema = z.object({
   actionType: z.literal(PvpActions.SILENCE),
   actionCategory: z.literal(PvpActionCategories.STATUS_EFFECT),
   parameters: z.object({
-    target: z.number(),
+    target: z.string(),
     duration: durationOptionsSchema,
   }),
 });
 
-const deafenStatusSchema = z.object({
+export const deafenStatusSchema = z.object({
   actionType: z.literal(PvpActions.DEAFEN),
   actionCategory: z.literal(PvpActionCategories.STATUS_EFFECT),
   parameters: z.object({
-    target: z.number(),
+    target: z.string(),
     duration: durationOptionsSchema,
   }),
 });
 
-const poisonStatusSchema = z.object({
+export const poisonStatusSchema = z.object({
   actionType: z.literal(PvpActions.POISON),
   actionCategory: z.literal(PvpActionCategories.STATUS_EFFECT),
   parameters: z.object({
-    target: z.number(),
+    target: z.string(),
     duration: durationOptionsSchema,
     find: z.string(),
     replace: z.string(),
@@ -310,7 +315,7 @@ const poisonStatusSchema = z.object({
 });
 
 // Combine all action schemas
-const pvpActionSchema = z.discriminatedUnion('actionType', [
+export const pvpActionSchema = z.discriminatedUnion('actionType', [
   amnesiaActionSchema,
   attackActionSchema,
   deceiveStatusSchema,
@@ -400,31 +405,30 @@ export const roomConfigSchema = z.object({
 export const agentConfigSchema = z.object({
   // wallet: walletAddressSchema,
   webhook: z.string().url(),
-
 });
 
 export const roomSetupContentSchema = z.object({
-    timestamp: z.number(),
-    name: z.string().min(1),
-    room_type: z.string(),
-    color: z
-      .string()
-      .optional()
-      .default('#' + Math.floor(Math.random() * 16777215).toString(16)),
-    image_url: z.string().url().optional().default('https://avatar.iran.liara.run/public'), 
-    token: validEthereumAddressSchema,
-    token_webhook: z.string().url(),
-    agents: z.array(z.number()),
-    // agents: z.record(z.string(), agentConfigSchema),
-    gm: z.number(),
-    chain_id: z.number(),
-    chain_family: z.string(),
-    room_config: roomConfigSchema,
-    transaction_hash: z
-      .string()
-      .regex(/^0x[a-fA-F0-9]{64}$/)
-      .optional(),
-  })
+  timestamp: z.number(),
+  name: z.string().min(1),
+  room_type: z.string(),
+  color: z
+    .string()
+    .optional()
+    .default('#' + Math.floor(Math.random() * 16777215).toString(16)),
+  image_url: z.string().url().optional().default('https://avatar.iran.liara.run/public'),
+  token: validEthereumAddressSchema,
+  token_webhook: z.string().url(),
+  agents: z.array(z.number()),
+  // agents: z.record(z.string(), agentConfigSchema),
+  gm: z.number(),
+  chain_id: z.number(),
+  chain_family: z.string(),
+  room_config: roomConfigSchema,
+  transaction_hash: z
+    .string()
+    .regex(/^0x[a-fA-F0-9]{64}$/)
+    .optional(),
+});
 
 export const roomSetupSchema = z.object({
   messageType: z.literal(WsMessageTypes.CREATE_ROOM),

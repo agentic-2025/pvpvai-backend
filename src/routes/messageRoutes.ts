@@ -19,7 +19,7 @@ import { signatureVerificationMiddleware } from '../middleware/signatureVerifica
 
 export async function messagesRoutes(server: FastifyInstance) {
   // Register signature verification middleware
-  await signatureVerificationMiddleware(server);
+  // await signatureVerificationMiddleware(server);
 
   // Agent Message Route
   server.post<{

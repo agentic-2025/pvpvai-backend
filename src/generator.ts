@@ -16,6 +16,8 @@ import {
   subscribeRoomInputMessageSchema,
 } from './utils/schemas';
 import { sortObjectKeys } from './utils/sortObjectKeys';
+import { ethers } from 'ethers';
+import { roomAbi } from './types/contract.types';
 
 const supabase = createClient<Database>(
   process.env.SUPABASE_URL || '',
@@ -30,6 +32,7 @@ const CONNECTIONS_PER_USER = 5;
 const RECONNECT_INTERVAL = 10000;
 const BAD_MESSAGE_PROBABILITY = 0.005;
 const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3000';
+const PVP_ACTION_PROBABILITY = 0.05; // 5% chance of PVP action when message is generated
 
 // Message type configuration flags - can be modified inline
 const MESSAGE_TYPE_CONFIG = {
@@ -280,6 +283,40 @@ function setProbabilities(probs: Partial<typeof BASE_PROBABILITIES>) {
 
 // To change probabilities:
 // setProbabilities({ PUBLIC_CHAT: 0.5, GM_MESSAGES: 0.5 });
+
+function stringToHex(str: string): string {
+  return ethers.hexlify(ethers.toUtf8Bytes(str));
+}
+
+async function invokePvpAction(wallet: ethers.Wallet, targetAddress: string) {
+  const provider = new ethers.JsonRpcProvider(process.env.BASE_SEPOLIA_RPC_URL);
+  const contract = new ethers.Contract(
+    '0x9Bd805b04809AeE006Eb05572AAFB2807A03eCDb', 
+    roomAbi, 
+    wallet.connect(provider)
+  );
+
+  // Always use attack for demo
+  const verb = 'attack';
+  
+  // Match the attack action schema parameters
+  const parameters = {
+    target: targetAddress,
+    message: "This is a test attack"
+  };
+
+  try {
+    const tx = await contract.invokePvpAction(
+      targetAddress,
+      verb,
+      stringToHex(JSON.stringify(parameters))
+    );
+    console.log(`Invoked PVP action ${verb}:`, tx.hash);
+    await tx.wait();
+  } catch (error) {
+    console.error('Error invoking PVP action:', error);
+  }
+}
 
 async function generateMessages() {
   const testUsers = await getTestUsers();
@@ -583,6 +620,22 @@ async function generateMessages() {
               }
             } catch (error) {
               console.error('Error generating observation message:', error);
+            }
+          } else if (rand < PVP_ACTION_PROBABILITY) {
+            // Get a random target from the connections that isn't the sender
+            const possibleTargets = connections.filter(c => 
+              c.wallet.address !== activeConnection.wallet.address
+            );
+            
+            if (possibleTargets.length > 0) {
+              const targetConnection = possibleTargets[
+                Math.floor(Math.random() * possibleTargets.length)
+              ];
+              
+              await invokePvpAction(
+                activeConnection.wallet,
+                targetConnection.wallet.address
+              );
             }
           }
 
