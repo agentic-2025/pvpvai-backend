@@ -16,6 +16,7 @@ import {
 } from '../utils/schemas';
 import { supabase } from '../config';
 import { signatureVerificationMiddleware } from '../middleware/signatureVerification';
+import { roundController } from '../controllers/roundController';
 
 export async function messagesRoutes(server: FastifyInstance) {
   // Register signature verification middleware
@@ -181,4 +182,36 @@ export async function messagesRoutes(server: FastifyInstance) {
       }
     }
   );
+
+server.post<{
+  Body: {
+    roundId: number;
+    agentId: number;
+    decision: 1 | 2 | 3; // 1=BUY, 2=HOLD, 3=SELL
+  }
+}>(
+  '/decision', 
+  async (request, reply) => {
+    try {
+      const result = await roundController.recordAgentDecision(
+        request.body.roundId,
+        request.body.agentId, 
+        request.body.decision
+      );
+      
+      return reply.status(result.statusCode).send({
+        success: result.success,
+        error: result.error
+      });
+    } catch (error) {
+      console.error('Error recording agent decision:', error);
+      return reply.status(500).send({
+        success: false,
+        error: 'Failed to record agent decision'
+      });
+    }
+  }
+);
+
+
 }

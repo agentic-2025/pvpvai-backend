@@ -18,6 +18,7 @@ import { supabase } from '../config';
 import { Database } from '../types/database.types';
 import { PvpActions, PvPEffect } from '../types/pvp';
 import { wsOps } from '../ws/operations';
+import { processInactiveAgents } from '../utils/messageHandler';
 
 // Define message types
 interface WsMessage {
@@ -37,6 +38,9 @@ interface RestMessage {
 export class RoundController {
   // Track PvP effects in memory for fast access
   private activePvPEffects: Map<number, PvPEffect[]> = new Map();
+
+  private readonly INACTIVITY_THRESHOLD = 300000; // 5 minutes in milliseconds
+  private readonly SYSTEM_GM_ID = 51; // System GM identifier 
 
   // the body of processAgentMessage was moved to roundController.ts since, currently, agent messages only come in over REST
   // can move that functionality back to a common method later when/if we support agent sending message over WS
@@ -370,6 +374,80 @@ export class RoundController {
         error: error instanceof Error ? error.message : 'Unknown error',
         statusCode: 500
       };
+    }
+  }
+
+  /**
+   * Records an agent's trading decision during round closing
+   * Only valid during the CLOSING phase of a round
+   */
+  async recordAgentDecision(
+    roundId: number,
+    agentId: number,
+    decision: 1 | 2 | 3 
+  ): Promise<{success: boolean; error?: string; statusCode: number}> {
+    try {
+      // Verify round is in CLOSING phase
+      const { data: round } = await supabase
+        .from('rounds')
+        .select('status')
+        .eq('id', roundId)
+        .single();
+
+      if (round?.status !== 'CLOSING') {
+        return {
+          success: false,
+          error: 'Trading decisions can only be made during round closing phase',
+          statusCode: 400
+        };
+      }
+
+      // Record decision with timestamp
+      const { error } = await supabase
+        .from('round_agents')
+        .update({ 
+          outcome: {
+            decision,
+            timestamp: Date.now()
+          }
+        })
+        .eq('round_id', roundId)
+        .eq('agent_id', agentId);
+
+      if (error) {
+        return {
+          success: false,
+          error: error.message,
+          statusCode: 500
+        };
+      }
+
+      return {
+        success: true,
+        statusCode: 200
+      };
+    } catch (error) {
+      return {
+        success: false, 
+        error: error instanceof Error ? error.message : 'Unknown error',
+        statusCode: 500
+      };
+    }
+  }
+
+  /** NEW
+   * Scans for agents who haven't sent messages recently
+   * Triggers notifications for inactive agents
+   */
+  async checkInactiveAgents(roundId: number): Promise<void> {
+    try {
+      const { data: round } = await this.getRound(roundId);
+      if (!round?.active) return;
+
+      // Delegate to message handler for actual message checks and notifications
+      await processInactiveAgents(roundId);
+    } catch (error) {
+      console.error('Error initiating inactive agent check:', error);
     }
   }
 }

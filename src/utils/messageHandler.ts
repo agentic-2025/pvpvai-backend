@@ -41,6 +41,278 @@ function isValidEthereumAddress(address: string): boolean {
   return /^0x[a-fA-F0-9]{40}$/.test(address);
 }
 
+const INACTIVITY_THRESHOLD = 20000; // 20 sec
+const SYSTEM_GM_ID = 51; // System GM identifier // TODO make configurable
+
+// Constants for decision request timing
+const DECISION_REQUEST_TIMEOUT = 30000; // 30 seconds until retry
+const MAX_DECISION_RETRIES = 3; // Maximum number of retries for decision requests
+const DECISION_CHECK_INTERVAL = 10000; // Check every 10 seconds
+
+/**
+ * NEW: Main function to check inactive agents in a round
+ * 1. Gets all non-kicked agents in round
+ * 2. Fetches recent messages
+ * 3. Creates context from recent discussion
+ * 4. Notifies agents who haven't sent messages within threshold
+ */
+export async function processInactiveAgents(roundId: number): Promise<void> {
+  try {
+    const now = new Date();
+    const thresholdDate = new Date(now.getTime() - INACTIVITY_THRESHOLD);
+
+    // Get all agents in round with their details and last messages
+    const { data: roundAgents, error } = await supabase
+      .from('round_agents')
+      .select(`
+        id,
+        agent_id,
+        last_message,
+        kicked,
+        agents!round_agents_agent_id_fkey (
+          display_name,
+          type
+        )
+      `)
+      .eq('round_id', roundId)
+      .eq('kicked', false);
+
+    if (error || !roundAgents) {
+      console.error('Error fetching round agents:', error);
+      return;
+    }
+
+    // Get recent messages from all agents in the round
+    const { data: recentMessages } = await supabase
+      .from('round_agent_messages')
+      .select(`
+        message,
+        agent_id,
+        agents!round_agent_messages_agent_id_fkey (
+          display_name
+        )
+      `)
+      .eq('round_id', roundId)
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    // Filter inactive agents
+    const inactiveAgents = roundAgents.filter(agent => {
+      if (!agent.last_message) return true;
+      const lastMessageDate = new Date(agent.last_message);
+      return lastMessageDate < thresholdDate;
+    });
+
+    // Format recent messages context with proper type checking
+    const messageContext = recentMessages
+      ?.map(msg => {
+        const agentName = msg.agents?.display_name || `Agent ${msg.agent_id}`;
+        // Safely access nested message content
+        const messageObj = msg.message as { content?: { text?: string } } | string;
+        let content = '';
+        
+        if (typeof messageObj === 'string') {
+          content = messageObj;
+        } else if (messageObj?.content?.text) {
+          content = messageObj.content.text;
+        }
+        
+        return `${agentName}: ${content || 'No message content'}`;
+      })
+      .join('\n') || 'No recent messages';
+
+    // Notify each inactive agent
+    for (const agent of inactiveAgents) {
+      await notifyInactiveAgent(roundId, agent.agent_id, messageContext);
+    }
+  } catch (error) {
+    console.error('Error processing inactive agents:', error);
+  }
+}
+
+/**
+ * NEW: Sends targeted notification to an inactive agent
+ * Includes recent message context to help agent participate in discussion.
+ * This is separate from trading decisions which only happen at round end.
+ */
+async function notifyInactiveAgent(
+  roundId: number,
+  agentId: number,
+  messageContext: string
+): Promise<void> {
+  try {
+    const { data: round } = await supabase
+      .from('rounds')
+      .select('*')
+      .eq('id', roundId)
+      .single();
+
+    if (!round) return;
+
+    const content = {
+      gmId: SYSTEM_GM_ID,
+      timestamp: Date.now(),
+      targets: [agentId],
+      roomId: round.room_id,
+      roundId: roundId,
+      message: `Please participate in the ongoing discussion to avoid being kicked:\n\nRecent messages:\n${messageContext}`,
+      deadline: Date.now() + 10000, // 10 second response window // TODO change if needed
+      ignoreErrors: false,
+      additionalData: {
+        requestType: 'PARTICIPATION_REQUEST', // Changed from TRADING_DECISION
+        attempt: 1
+      }
+    };
+
+    // Sign message content with backend wallet
+    const signature = await signMessage(content);
+
+    // Create properly typed GM message
+    const gmMessage: z.infer<typeof gmMessageInputSchema> = {
+      messageType: WsMessageTypes.GM_MESSAGE,
+      signature,
+      sender: backendEthersSigningWallet.address,
+      content
+    };
+
+    await processGmMessage(gmMessage);
+  } catch (error) {
+    console.error('Error notifying inactive agent:', error);
+  }
+}
+
+/**
+ * NEW: Request end-of-round trading decisions from agent
+ */
+export async function requestAgentDecision(
+  roundId: number,
+  agentId: number
+): Promise<void> {
+  try {
+    // Get round with all needed fields
+    const { data: round } = await supabase
+      .from('rounds')
+      .select('status, room_id') // Added room_id to selection
+      .eq('id', roundId)
+      .single();
+
+    if (round?.status !== 'CLOSING') {
+      console.log('Not requesting decision - round not in closing phase');
+      return;
+    }
+
+    // Check if agent already made a decision
+    const { data: agentData } = await supabase
+      .from('round_agents')
+      .select('outcome')
+      .eq('round_id', roundId)
+      .eq('agent_id', agentId)
+      .single();
+
+    // Type check the outcome data
+    const outcome = agentData?.outcome as { decision?: number } | null;
+    if (outcome?.decision) {
+      return; // Decision already recorded
+    }
+
+    const content = {
+      gmId: SYSTEM_GM_ID,
+      timestamp: Date.now(),
+      targets: [agentId] as number[], // Fix: Use mutable array type
+      roomId: round.room_id, // Now guaranteed to exist
+      roundId,
+      message: 'Please make your trading decision (BUY/HOLD/SELL)',
+      deadline: Date.now() + DECISION_REQUEST_TIMEOUT,
+      ignoreErrors: false,
+      additionalData: {
+        requestType: 'TRADING_DECISION',
+        attempt: 1
+      }
+    };
+
+    const signature = await signMessage(content);
+    const gmMessage: z.infer<typeof gmMessageInputSchema> = {
+      messageType: WsMessageTypes.GM_MESSAGE,
+      signature,
+      sender: backendEthersSigningWallet.address,
+      content
+    };
+
+    await processGmMessage(gmMessage);
+    await scheduleDecisionCheck(roundId, agentId, 1);
+  } catch (error) {
+    console.error('Error requesting agent decision:', error);
+  }
+}
+
+/**
+ * NEW: Check if agent has made a decision and retry if needed
+ */
+async function scheduleDecisionCheck(
+  roundId: number,
+  agentId: number,
+  attempt: number
+): Promise<void> {
+  setTimeout(async () => {
+    try {
+      // Get room first to ensure we have roomId
+      const room = await getAgentRoom(roundId);
+      if (!room?.room_id) return;
+
+      const { data: agentData } = await supabase
+        .from('round_agents')
+        .select('outcome')
+        .eq('round_id', roundId)
+        .eq('agent_id', agentId)
+        .single();
+
+      // Type check the outcome data
+      const outcome = agentData?.outcome as { decision?: number } | null;
+      if (!outcome?.decision && attempt < MAX_DECISION_RETRIES) {
+        const content = {
+          gmId: SYSTEM_GM_ID,
+          timestamp: Date.now(),
+          targets: [agentId] as number[], // Fix: Use mutable array type
+          roomId: room.room_id, // Now guaranteed to exist
+          roundId,
+          message: `REMINDER (${attempt + 1}/${MAX_DECISION_RETRIES}): Please make your trading decision (BUY/HOLD/SELL)`,
+          deadline: Date.now() + DECISION_REQUEST_TIMEOUT,
+          ignoreErrors: false,
+          additionalData: {
+            requestType: 'TRADING_DECISION',
+            attempt: attempt + 1
+          }
+        } as const;
+
+        const signature = await signMessage(content);
+        const gmMessage: z.infer<typeof gmMessageInputSchema> = {
+          messageType: WsMessageTypes.GM_MESSAGE,
+          signature,
+          sender: backendEthersSigningWallet.address,
+          content
+        };
+
+        await processGmMessage(gmMessage);
+        await scheduleDecisionCheck(roundId, agentId, attempt + 1);
+      }
+    } catch (error) {
+      console.error('Error checking agent decision:', error);
+    }
+  }, DECISION_CHECK_INTERVAL);
+}
+
+/**
+ * NEW: Helper to get room info for an agent in a round
+ */
+async function getAgentRoom(roundId: number) {
+  const { data } = await supabase
+    .from('rounds')
+    .select('room_id')
+    .eq('id', roundId)
+    .single();
+  return data;
+}
+
 type ProcessMessageResponse = {
   message?: string;
   data?: any;

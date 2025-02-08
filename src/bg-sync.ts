@@ -68,7 +68,7 @@ export async function createNewRound(room: Database['public']['Functions']['get_
 
     return;
   } catch (error) {
-    console.error('Error in createNewRound:', error);
+    // console.error('Error in createNewRound:', error);  // TODO turn back on if needed
   }
 }
 
