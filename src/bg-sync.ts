@@ -48,7 +48,8 @@ export async function createNewRound(room: Database['public']['Functions']['get_
     }
 
     console.log("new round created", newRound);
-    console.log("calling contract #{contract_address} startRound");
+    console.log(`calling contract ${room
+      .contract_address} startRound`);
 
     const contract = getRoomContract(room.contract_address);
     const tx = await contract.startRound();
