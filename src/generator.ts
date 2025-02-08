@@ -9,6 +9,7 @@ import { WsMessageTypes } from './types/ws';
 import {
   agentMessageInputSchema,
   gmMessageInputSchema,
+  observationMessageContentSchema,
   observationMessageInputSchema,
   ObservationType,
   participantsInputMessageSchema,
@@ -35,9 +36,9 @@ const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3000';
 const MESSAGE_TYPE_CONFIG = {
   PUBLIC_CHAT: false,
   PARTICIPANTS: false,
-  GM_MESSAGES: true,
+  GM_MESSAGES: false,
   AGENT_MESSAGES: true,
-  OBSERVATIONS: true,
+  OBSERVATIONS: false,
   BAD_MESSAGES: false, // Keeping this false by default for safety
 } as const;
 
@@ -53,16 +54,16 @@ const BASE_PROBABILITIES = {
 const randomDelay = () => Math.floor(Math.random() * (MAX_DELAY - MIN_DELAY + 1)) + MIN_DELAY;
 
 const keyMap: Record<string, number> = {
-  '0x4ffE2DF7B11ea3f28c6a7C90b39F52427c9D550d': 37,
-  '0x830598617569AfD7Ad16343f5D4a226578b16A3d': 38,
-  '0x1D5EbEABEE35dbBA6Fd2847401F979b3f6249a93': 39,
+  '0x4E5dC9dF946500b07E9c66e4DD29bf9CD062002B': 37,
+  '0x67bFd0B42F5f39710B4E90301289F81Eab6315dA': 38,
+  '0x12BE474D127757d0a6a36631294F8FfBCdeF44F8': 39,
 };
 
 // Private keys corresponding to the addresses above
 const keyPool = [
-  '0x922a64dac895e4ebedd2e942060f73e85b0bda1ef7cc852c5e194629f437320a', // for 0x4ffE2DF7B11ea3f28c6a7C90b39F52427c9D550d
-  '0x3569d1263cf81e7f06dec377a41ed2bd509fe882fc170215563e347d6db752ba', // for 0x830598617569AfD7Ad16343f5D4a226578b16A3d
-  '0xb92bd0c7c141fc381efbf5381ec12f674302b3ab29382fec2a6998e073fd1b88', // for 0x1D5EbEABEE35dbBA6Fd2847401F979b3f6249a93
+  '0xffecbb174b4aceaa69cccbec90b87dce36ce19abb9a56fe2cc9c3becbec2b847', // for 0x4E5dC9dF946500b07E9c66e4DD29bf9CD062002B
+  '0x0b0041a57eac50c87be1b1e25a41f698add5b5b3142b4795d72bd1c4b1d1f2de', // for 0x67bFd0B42F5f39710B4E90301289F81Eab6315dA
+  '0xa982f591f9334e05b20ee56bf442253f51e527ede300b2cad1731b38e3a017aa', // for 0x12BE474D127757d0a6a36631294F8FfBCdeF44F8
 ];
 
 const sampleMessages = [
@@ -281,6 +282,40 @@ function setProbabilities(probs: Partial<typeof BASE_PROBABILITIES>) {
 // To change probabilities:
 // setProbabilities({ PUBLIC_CHAT: 0.5, GM_MESSAGES: 0.5 });
 
+// At the top of the file, define our agent keys and their mappings
+
+const AGENT_KEYS = {
+  AGENT_37: {
+    privateKey: '0xffecbb174b4aceaa69cccbec90b87dce36ce19abb9a56fe2cc9c3becbec2b847',
+    address: '0x4E5dC9dF946500b07E9c66e4DD29bf9CD062002B',
+    id: 37,
+  },
+  AGENT_38: {
+    privateKey: '0x0b0041a57eac50c87be1b1e25a41f698add5b5b3142b4795d72bd1c4b1d1f2de',
+    address: '0x67bFd0B42F5f39710B4E90301289F81Eab6315dA',
+    id: 38,
+  },
+  AGENT_39: {
+    privateKey: '0xa982f591f9334e05b20ee56bf442253f51e527ede300b2cad1731b38e3a017aa',
+    address: '0x12BE474D127757d0a6a36631294F8FfBCdeF44F8',
+    id: 39,
+  },
+} as const;
+
+// Keep track of which agent was used last
+let lastAgentIndex = 0;
+
+// Function to get the next agent in rotation
+function getNextAgent() {
+  const agents = Object.values(AGENT_KEYS);
+  const agent = agents[lastAgentIndex];
+  lastAgentIndex = (lastAgentIndex + 1) % agents.length;
+  return {
+    wallet: new Wallet(agent.privateKey),
+    agentId: agent.id,
+  };
+}
+
 async function generateMessages() {
   const testUsers = await getTestUsers();
   if (!testUsers) {
@@ -294,9 +329,10 @@ async function generateMessages() {
 
   function createConnection(userId: number): Connection {
     const ws = new WebSocket(WEBSOCKET_URL);
-    // Only use the wallets we want for agent messages
+
+    // Use any wallet for the connection - we'll select specific agents when sending messages
     const wallet = new Wallet(keyPool[Math.floor(Math.random() * keyPool.length)]);
-    console.log(`Created wallet ${wallet.address} for user ${userId}`);
+    console.log(`Created connection for user ${userId} with wallet ${wallet.address}`);
 
     const connection: Connection = {
       ws,
@@ -307,38 +343,42 @@ async function generateMessages() {
     };
 
     ws.on('open', () => {
-      console.log(`Connection opened for user ${userId}`);
+      console.log(`Connection established for user ${userId}`);
+      connection.isSubscribed = false;
     });
 
     ws.on('message', (data) => {
       const message = JSON.parse(data.toString());
-      console.log(`User ${userId} received message:`, message);
+      // console.log(`User ${userId} received message:`, message);
       if (message.type === WsMessageTypes.HEARTBEAT) {
         ws.send(JSON.stringify({ type: WsMessageTypes.HEARTBEAT, content: {} }));
       }
     });
 
     ws.on('error', console.error);
+
     ws.on('close', () => {
       console.log(`Connection closed for user ${userId}, reconnecting...`);
       const index = connections.indexOf(connection);
       if (index > -1) {
         connections.splice(index, 1);
       }
+      // Create a new connection after a delay
       setTimeout(() => {
-        connections.push(createConnection(userId));
-      }, 5000);
+        const newConnection = createConnection(userId);
+        connections.push(newConnection);
+      }, RECONNECT_INTERVAL);
     });
 
     return connection;
   }
 
   // Initialize connections
-  testUsers.forEach((userId) => {
+  for (const user of testUsers) {
     for (let i = 0; i < CONNECTIONS_PER_USER; i++) {
-      connections.push(createConnection(userId));
+      connections.push(createConnection(user.id));
     }
-  });
+  }
 
   // Periodically force some connections to reconnect
   setInterval(() => {
@@ -422,6 +462,7 @@ async function generateMessages() {
       // Send messages from random connections
       if (roomAndRound && connections.length > 0) {
         const activeConnection = connections[Math.floor(Math.random() * connections.length)];
+        console.log('activeConnection', activeConnection.wallet.address);
         if (activeConnection.ws.readyState === WebSocket.OPEN) {
           const rand = Math.random();
           let message;
@@ -491,13 +532,9 @@ async function generateMessages() {
             // 12.5% for agent messages
             // Agent message via POST
             try {
-              const agentId = keyMap[activeConnection.wallet.address];
-              
-              // Only proceed if we have a valid agentId
-              if (agentId === undefined) {
-                console.log(`No agentId found for wallet ${activeConnection.wallet.address}, skipping message`);
-                continue;
-              }
+              // Get next agent in rotation instead of random selection
+              const { wallet: agentWallet, agentId } = getNextAgent();
+              console.log(`Selected Agent ${agentId} (${agentWallet.address}) for message`);
 
               const content = {
                 timestamp: Date.now(),
@@ -507,20 +544,23 @@ async function generateMessages() {
                 text: getRandomAgentMessage(),
               };
 
-              console.log('Sending agent message with content:', content);
-              const signature = await activeConnection.wallet.signMessage(
+              console.log(
+                `Sending agent message from Agent ${agentId} (${agentWallet.address}):`,
+                content
+              );
+              const signature = await agentWallet.signMessage(
                 JSON.stringify(sortObjectKeys(content))
               );
 
               const message: z.infer<typeof agentMessageInputSchema> = {
                 messageType: WsMessageTypes.AGENT_MESSAGE,
-                sender: activeConnection.wallet.address,
+                sender: agentWallet.address,
                 signature,
                 content: sortObjectKeys(content),
               };
 
               const response = await axios.post(`${API_BASE_URL}/messages/agentMessage`, message);
-              console.log(`Agent ${agentId} sent message:`, {
+              console.log(`Agent ${agentId} sent message successfully:`, {
                 message,
                 response: response.data,
               });
@@ -543,26 +583,25 @@ async function generateMessages() {
                   Math.floor(Math.random() * Object.values(ObservationType).length)
                 ];
 
-              const content = {
-                agentId: keyMap[activeConnection.wallet.address] || 57,
+              const observationData = getRandomObservation(observationType);
+              // Validate the data matches the schema
+              const validatedData = observationMessageContentSchema.parse({
                 timestamp: Date.now(),
                 roomId: roomAndRound.roomId,
                 roundId: roomAndRound.roundId,
+                agentId: keyMap[activeConnection.wallet.address] || 57,
                 observationType,
-                data: getRandomObservation(observationType),
-              };
+                data: observationData,
+              });
 
-              console.log('Sending observation message with content:', content);
-
-              const signature = await activeConnection.wallet.signMessage(JSON.stringify(content));
-
-              const observationMessage: z.infer<typeof observationMessageInputSchema> = {
+              const observationMessage = observationMessageInputSchema.parse({
                 messageType: 'observation',
                 sender: activeConnection.wallet.address,
-                signature,
-                content: sortObjectKeys(content),
-              };
-              console.log('observationMessage', observationMessage);
+                signature: await signMessage(validatedData),
+                content: validatedData,
+              });
+
+              console.log('Sending observation message with content:', observationMessage);
 
               try {
                 const response = await axios.post(

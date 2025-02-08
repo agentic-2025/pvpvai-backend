@@ -34,6 +34,7 @@ import {
   observationMessageAiChatOutputSchema,
   observationMessageInputSchema,
 } from './schemas';
+import { sortObjectKeys } from './sortObjectKeys';
 import { roundAndAgentsPreflight } from './validation';
 
 // Add address validation helper
@@ -326,7 +327,7 @@ export async function processAgentMessage(
 ): Promise<ProcessMessageResponse> {
   try {
     const { error: signatureError } = verifySignedMessage(
-      message.content,
+      sortObjectKeys(message.content),
       message.signature,
       message.sender,
       message.content.timestamp,
@@ -348,7 +349,6 @@ export async function processAgentMessage(
       reason: roundReason,
     } = await roundAndAgentsPreflight(roundId);
 
-
     const agentKeys = await supabase
       .from('room_agents')
       .select('wallet_address, agent_id, agents(eth_wallet_address)')
@@ -356,8 +356,7 @@ export async function processAgentMessage(
 
     const senderAgent = agentKeys?.data?.find((a) => {
       return (
-        a.agent_id === message.content.agentId ||
-        a.agents.eth_wallet_address === message.sender
+        a.agent_id === message.content.agentId || a.agents.eth_wallet_address === message.sender
       );
     });
 
@@ -736,11 +735,32 @@ export async function sendMessageToAgent(params: {
       };
     }
 
-    // Ensure endpoint has /message path
-    let endpointUrl = new URL(endpoint);
-    if (!endpointUrl.pathname.endsWith('/message')) {
-      endpointUrl = new URL('/message', endpointUrl);
+    let pathSuffix = '';
+    switch (params.message.messageType) {
+      case WsMessageTypes.AGENT_MESSAGE:
+        pathSuffix = '/messages/receiveAgentMessage';
+        break;
+      case WsMessageTypes.GM_MESSAGE:
+        pathSuffix = '/messages/receiveGmMessage';
+        break;
+      case WsMessageTypes.OBSERVATION:
+        pathSuffix = '/messages/receiveObservation';
+        break;
+      default:
+        return {
+          error: `Tried to send unsupported message type to agent ${id}: ${params.message.messageType}`,
+          statusCode: 400,
+        };
     }
+
+    console.log('Sending message to agent at', endpoint, pathSuffix);
+
+    // Ensure endpoint has /message path
+    let endpointUrl = new URL(pathSuffix, endpoint);
+    // if (!endpointUrl.pathname.endsWith('/message')) {
+    //   endpointUrl = new URL('/message', endpointUrl);
+    // }
+    console.log('Sending message to agent at', endpointUrl.toString());
 
     // Send request
     //TODO support sending over WS

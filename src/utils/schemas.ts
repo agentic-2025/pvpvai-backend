@@ -56,19 +56,86 @@ export enum ObservationType {
   GAME_EVENT = 'game-event',
 }
 
+// Wallet Balance Schemas
+export const observationWalletBalanceDataSchema = z.object({
+  walletBalances: z.record(
+    z.string(),
+    z.object({
+      nativeBalance: z.bigint(),
+      tokenBalances: z.record(z.string(), z.bigint()),
+    })
+  ),
+});
+
+// Price Data Schemas
+export const observationPriceDataSchema = z.object({
+  nativePrice: z.number(),
+  tokenPrices: z.record(
+    z.string(),
+    z.object({
+      source: z.string(),
+      tokenPriceUsd: z.number(),
+    })
+  ),
+});
+
+// Sample data validation schemas
+export const sampleObservationsSchema = z.object({
+  [ObservationType.WALLET_BALANCES]: z.array(
+    z.object({
+      address: z.string(),
+      balances: z.object({
+        ETH: z.string(),
+        USDC: z.string(),
+        WETH: z.string(),
+      }),
+    })
+  ),
+  [ObservationType.PRICE_DATA]: z.array(
+    z.object({
+      pair: z.string(),
+      price: z.string(),
+      timestamp: z.number(),
+    })
+  ),
+  [ObservationType.GAME_EVENT]: z.array(
+    z.object({
+      type: z.string(),
+      details: z.string(),
+    })
+  ),
+});
+
+// Update the existing observation message schema to use these
+export const observationMessageContentSchema = z.object({
+  timestamp: z.number(),
+  roomId: z.number(),
+  roundId: z.number(),
+  agentId: z.number(),
+  observationType: z.nativeEnum(ObservationType),
+  data: z.any(),
+  // data: z.union([
+  //   observationWalletBalanceDataSchema,
+  //   observationPriceDataSchema,
+  //   z.object({
+  //     type: z.string(),
+  //     details: z.string(),
+  //   }),
+  // ]),
+});
+
 export const observationMessageInputSchema = z.object({
   messageType: z.literal('observation'),
-  signature: z.string(),
   sender: z.string(),
-  content: z.object({
-    agentId: z.number().int().positive(), //The agent who sent the message
-    timestamp: z.number(),
-    roomId: z.number(), // Redundant with path, but kept here since this message is passthrough to AI Chat for frontend.
-    roundId: z.number(),
-    observationType: z.nativeEnum(ObservationType),
-    data: z.any(), // TODO Tighten up this type later
-  }),
+  signature: z.string(),
+  content: observationMessageContentSchema,
 });
+
+// Type exports
+export type ObservationWalletBalanceData = z.infer<typeof observationWalletBalanceDataSchema>;
+export type ObservationPriceData = z.infer<typeof observationPriceDataSchema>;
+export type ObservationMessageContent = z.infer<typeof observationMessageContentSchema>;
+export type ObservationMessage = z.infer<typeof observationMessageInputSchema>;
 
 // Only difference between input and output is that the output message will be signed by GM
 export const observationMessageAgentOutputSchema = observationMessageInputSchema; // Message sent to agents
@@ -120,15 +187,20 @@ export const agentMessageInputSchema = z.object({
     roundId: z.number(),
     agentId: z.number(),
     text: z.string(),
-    context: z.array(z.object({ // added optional
-      id: z.number(),
-      message: z.any(),
-      message_type: z.string(),
-      created_at: z.string(),
-      agent_id: z.number(),
-      original_author: z.number(),
-      pvp_status_effects: z.record(z.string(), z.any())
-    })).optional()
+    context: z
+      .array(
+        z.object({
+          // added optional
+          id: z.number(),
+          message: z.any(),
+          message_type: z.string(),
+          created_at: z.string(),
+          agent_id: z.number(),
+          original_author: z.number(),
+          pvp_status_effects: z.record(z.string(), z.any()),
+        })
+      )
+      .optional(),
   }),
 });
 
@@ -400,31 +472,30 @@ export const roomConfigSchema = z.object({
 export const agentConfigSchema = z.object({
   // wallet: walletAddressSchema,
   webhook: z.string().url(),
-
 });
 
 export const roomSetupContentSchema = z.object({
-    timestamp: z.number(),
-    name: z.string().min(1),
-    room_type: z.string(),
-    color: z
-      .string()
-      .optional()
-      .default('#' + Math.floor(Math.random() * 16777215).toString(16)),
-    image_url: z.string().url().optional().default('https://avatar.iran.liara.run/public'), 
-    token: validEthereumAddressSchema,
-    token_webhook: z.string().url(),
-    agents: z.array(z.number()),
-    // agents: z.record(z.string(), agentConfigSchema),
-    gm: z.number(),
-    chain_id: z.number(),
-    chain_family: z.string(),
-    room_config: roomConfigSchema,
-    transaction_hash: z
-      .string()
-      .regex(/^0x[a-fA-F0-9]{64}$/)
-      .optional(),
-  })
+  timestamp: z.number(),
+  name: z.string().min(1),
+  room_type: z.string(),
+  color: z
+    .string()
+    .optional()
+    .default('#' + Math.floor(Math.random() * 16777215).toString(16)),
+  image_url: z.string().url().optional().default('https://avatar.iran.liara.run/public'),
+  token: validEthereumAddressSchema,
+  token_webhook: z.string().url(),
+  agents: z.array(z.number()),
+  // agents: z.record(z.string(), agentConfigSchema),
+  gm: z.number(),
+  chain_id: z.number(),
+  chain_family: z.string(),
+  room_config: roomConfigSchema,
+  transaction_hash: z
+    .string()
+    .regex(/^0x[a-fA-F0-9]{64}$/)
+    .optional(),
+});
 
 export const roomSetupSchema = z.object({
   messageType: z.literal(WsMessageTypes.CREATE_ROOM),

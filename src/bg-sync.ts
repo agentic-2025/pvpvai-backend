@@ -1,22 +1,22 @@
-import { backendEthersSigningWallet, supabase } from "./config";
-// import { roundService } from '../services/roundService';
-import { roomService } from "./services/roomService";
-import { CronJob } from 'cron';
-import { Database } from "./types/database.types";
-import { getRoomContract } from "./room-contract";
-import { wsOps } from "./ws/operations";
-import { processGmMessage } from "./utils/messageHandler";
-import { WsMessageTypes } from "./types/ws";
-import { ethers } from "ethers";
+/* 
+  Background process that closes and opens new rounds as needed
+*/
+import { z } from 'zod';
+import { backendEthersSigningWallet, supabase } from './config';
+import { getRoomContract } from './room-contract';
+import { Database } from './types/database.types';
+import { WsMessageTypes } from './types/ws';
+import { processGmMessage } from './utils/messageHandler';
+import { gmMessageInputSchema } from './utils/schemas';
 import { sortObjectKeys } from './utils/sortObjectKeys';
-import { gmMessageInputSchema } from "./utils/schemas";
-import { z } from "zod";
 
 export async function checkAndCreateRounds() {
   try {
     // Query rooms that need new rounds
-    console.log("checking for rooms needing rounds");
-    const { data: roomsNeedingRounds, error } = await supabase.rpc('get_active_rooms_needing_rounds');
+    console.log('checking for rooms needing rounds');
+    const { data: roomsNeedingRounds, error } = await supabase.rpc(
+      'get_active_rooms_needing_rounds'
+    );
 
     if (error) {
       console.error('Error fetching rooms:', error);
@@ -28,27 +28,28 @@ export async function checkAndCreateRounds() {
       await createNewRound(room);
       break;
     }
-
   } catch (error) {
     // console.error('Error in checkAndCreateRounds:', error); // TODO turn back on if needed
   }
 }
 
-export async function createNewRound(room: Database['public']['Functions']['get_active_rooms_needing_rounds']['Returns'][0]) {
+export async function createNewRound(
+  room: Database['public']['Functions']['get_active_rooms_needing_rounds']['Returns'][0]
+) {
   try {
     const { data: newRound, error: insertError } = await supabase
-    .rpc('create_round_from_room', {
-      room_id_param: room.id
-    })
-    .single();
+      .rpc('create_round_from_room', {
+        room_id_param: room.id,
+      })
+      .single();
 
     if (insertError) {
       console.error('Error creating new round:', insertError);
       return;
     }
 
-    console.log("new round created", newRound);
-    console.log("calling contract #{contract_address} startRound");
+    console.log('new round created', newRound);
+    console.log('calling contract #{contract_address} startRound');
 
     const contract = getRoomContract(room.contract_address);
     const tx = await contract.startRound();
@@ -56,11 +57,11 @@ export async function createNewRound(room: Database['public']['Functions']['get_
 
     // update the round status to OPEN
     const { error: updateError } = await supabase
-    .from('rounds')
-    .update({ status: 'OPEN', active: true })
-    .eq('id', newRound.id);
+      .from('rounds')
+      .update({ status: 'OPEN', active: true })
+      .eq('id', newRound.id);
 
-    if(updateError) {
+    if (updateError) {
       console.error('Error updating round:', updateError);
     }
 
@@ -75,7 +76,7 @@ export async function createNewRound(room: Database['public']['Functions']['get_
 export async function checkAndCloseRounds() {
   try {
     // Query rounds that needs to be closed
-    console.log("checking for rounds to close");
+    console.log('checking for rounds to close');
     const { data: roundsToClose, error } = await supabase.rpc('get_active_rounds_to_close');
 
     if (error) {
@@ -88,27 +89,28 @@ export async function checkAndCloseRounds() {
       // console.log(room.id);
       await closeRound(round);
     }
-
   } catch (error) {
     // console.error('Error in checkAndCreateRounds:', error); // TODO turn back on if needed
   }
 }
 
-export async function closeRound(round: Database['public']['Functions']['get_active_rounds_to_close']['Returns'][0]) {
-  console.log("closing round", round.id);
-  const { error: updateError3} = await supabase
-      .from('rounds')
-      .update({ status: 'CLOSING'})
-      .eq('id', round.id)
-      .eq('active', true);
+export async function closeRound(
+  round: Database['public']['Functions']['get_active_rounds_to_close']['Returns'][0]
+) {
+  console.log('closing round', round.id);
+  const { error: updateError3 } = await supabase
+    .from('rounds')
+    .update({ status: 'CLOSING' })
+    .eq('id', round.id)
+    .eq('active', true);
 
-  if(updateError3) {
+  if (updateError3) {
     console.error('Error updating round:', updateError3);
     return;
   }
 
   const contract = getRoomContract(round.contract_address);
-  const processing = 2
+  const processing = 2;
   const tx = await contract.setCurrentRoundState(processing);
   // const tx = await contract.performUpKeep(ethers.toUtf8Bytes(''));
   const receipt = await tx.wait();
@@ -120,7 +122,7 @@ export async function closeRound(round: Database['public']['Functions']['get_act
     .eq('round_id', round.id)
     .eq('kicked', false);
 
-  if(roundAgentsError) {
+  if (roundAgentsError) {
     console.error('Error fetching round agents:', roundAgentsError);
     return;
   }
@@ -156,9 +158,9 @@ export async function closeRound(round: Database['public']['Functions']['get_act
 
   await processGmMessage(message);
 
-  // wait 30 seconds
-  // await new Promise(resolve => setTimeout(resolve, 30000));
-  await new Promise(resolve => setTimeout(resolve, 1000));
+  // wait 30 seconds for the agents to respond
+  await new Promise((resolve) => setTimeout(resolve, 30000));
+  // await new Promise(resolve => setTimeout(resolve, 1000));
 
   // select all the round_agents that are not kicked
   const { data: roundAgents2, error: roundAgentsError2 } = await supabase
@@ -177,22 +179,25 @@ export async function closeRound(round: Database['public']['Functions']['get_act
       const outcome = JSON.parse(roundAgent.outcome as string);
 
       // 1 = buy, 2 = hold, 3 = sell
-      if(!outcome || Object.keys(outcome).length === 0) {
+      if (!outcome || Object.keys(outcome).length === 0) {
         await supabase
-        .from('round_agents')
-        .update({ outcome: { decision: Math.floor(Math.random() * 3) + 1   } })
-        .eq('id', roundAgent.id);
+          .from('round_agents')
+          .update({ outcome: { decision: Math.floor(Math.random() * 3) + 1, fabricated: true } })
+          .eq('id', roundAgent.id);
       }
 
       // 2 = processing
-      const tx = await contract.submitAgentDecision(roundAgent.rounds.rooms.room_agents[0].wallet_address, 2);
+      const tx = await contract.submitAgentDecision(
+        roundAgent.rounds.rooms.room_agents[0].wallet_address,
+        2
+      );
       const receipt = await tx.wait();
       console.log(receipt);
     } catch (error) {
       await supabase
-      .from('round_agents')
-      .update({ outcome: { decision: Math.floor(Math.random() * 3) + 1 } })
-      .eq('id', roundAgent.id);
+        .from('round_agents')
+        .update({ outcome: { decision: Math.floor(Math.random() * 3) + 1 } })
+        .eq('id', roundAgent.id);
     }
   }
 
@@ -224,14 +229,12 @@ export async function closeRound(round: Database['public']['Functions']['get_act
   console.log(receipt2);
 
   const { error: updateError } = await supabase
-  .from('rounds')
-  .update({ status: 'CLOSED', active: false })
-  .eq('id', round.id)
-  .eq('active', true);
+    .from('rounds')
+    .update({ status: 'CLOSED', active: false })
+    .eq('id', round.id)
+    .eq('active', true);
 
-  if(updateError) {
+  if (updateError) {
     console.error('Error updating round:', updateError);
   }
 }
-
-
