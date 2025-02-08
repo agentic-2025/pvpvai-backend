@@ -34,7 +34,6 @@ import {
   observationMessageAiChatOutputSchema,
   observationMessageInputSchema,
 } from './schemas';
-import { sortObjectKeys } from './sortObjectKeys';
 import { roundAndAgentsPreflight } from './validation';
 
 // Add address validation helper
@@ -65,7 +64,8 @@ export async function processInactiveAgents(roundId: number): Promise<void> {
     // Get all agents in round with their details and last messages
     const { data: roundAgents, error } = await supabase
       .from('round_agents')
-      .select(`
+      .select(
+        `
         id,
         agent_id,
         last_message,
@@ -74,7 +74,8 @@ export async function processInactiveAgents(roundId: number): Promise<void> {
           display_name,
           type
         )
-      `)
+      `
+      )
       .eq('round_id', roundId)
       .eq('kicked', false);
 
@@ -86,41 +87,44 @@ export async function processInactiveAgents(roundId: number): Promise<void> {
     // Get recent messages from all agents in the round
     const { data: recentMessages } = await supabase
       .from('round_agent_messages')
-      .select(`
+      .select(
+        `
         message,
         agent_id,
         agents!round_agent_messages_agent_id_fkey (
           display_name
         )
-      `)
+      `
+      )
       .eq('round_id', roundId)
       .order('created_at', { ascending: false })
       .limit(10);
 
     // Filter inactive agents
-    const inactiveAgents = roundAgents.filter(agent => {
+    const inactiveAgents = roundAgents.filter((agent) => {
       if (!agent.last_message) return true;
       const lastMessageDate = new Date(agent.last_message);
       return lastMessageDate < thresholdDate;
     });
 
     // Format recent messages context with proper type checking
-    const messageContext = recentMessages
-      ?.map(msg => {
-        const agentName = msg.agents?.display_name || `Agent ${msg.agent_id}`;
-        // Safely access nested message content
-        const messageObj = msg.message as { content?: { text?: string } } | string;
-        let content = '';
-        
-        if (typeof messageObj === 'string') {
-          content = messageObj;
-        } else if (messageObj?.content?.text) {
-          content = messageObj.content.text;
-        }
-        
-        return `${agentName}: ${content || 'No message content'}`;
-      })
-      .join('\n') || 'No recent messages';
+    const messageContext =
+      recentMessages
+        ?.map((msg) => {
+          const agentName = msg.agents?.display_name || `Agent ${msg.agent_id}`;
+          // Safely access nested message content
+          const messageObj = msg.message as { content?: { text?: string } } | string;
+          let content = '';
+
+          if (typeof messageObj === 'string') {
+            content = messageObj;
+          } else if (messageObj?.content?.text) {
+            content = messageObj.content.text;
+          }
+
+          return `${agentName}: ${content || 'No message content'}`;
+        })
+        .join('\n') || 'No recent messages';
 
     // Notify each inactive agent
     for (const agent of inactiveAgents) {
@@ -142,11 +146,7 @@ async function notifyInactiveAgent(
   messageContext: string
 ): Promise<void> {
   try {
-    const { data: round } = await supabase
-      .from('rounds')
-      .select('*')
-      .eq('id', roundId)
-      .single();
+    const { data: round } = await supabase.from('rounds').select('*').eq('id', roundId).single();
 
     if (!round) return;
 
@@ -161,8 +161,8 @@ async function notifyInactiveAgent(
       ignoreErrors: false,
       additionalData: {
         requestType: 'PARTICIPATION_REQUEST', // Changed from TRADING_DECISION
-        attempt: 1
-      }
+        attempt: 1,
+      },
     };
 
     // Sign message content with backend wallet
@@ -173,7 +173,7 @@ async function notifyInactiveAgent(
       messageType: WsMessageTypes.GM_MESSAGE,
       signature,
       sender: backendEthersSigningWallet.address,
-      content
+      content,
     };
 
     await processGmMessage(gmMessage);
@@ -185,10 +185,7 @@ async function notifyInactiveAgent(
 /**
  * NEW: Request end-of-round trading decisions from agent
  */
-export async function requestAgentDecision(
-  roundId: number,
-  agentId: number
-): Promise<void> {
+export async function requestAgentDecision(roundId: number, agentId: number): Promise<void> {
   try {
     // Get round with all needed fields
     const { data: round } = await supabase
@@ -227,8 +224,8 @@ export async function requestAgentDecision(
       ignoreErrors: false,
       additionalData: {
         requestType: 'TRADING_DECISION',
-        attempt: 1
-      }
+        attempt: 1,
+      },
     };
 
     const signature = await signMessage(content);
@@ -236,7 +233,7 @@ export async function requestAgentDecision(
       messageType: WsMessageTypes.GM_MESSAGE,
       signature,
       sender: backendEthersSigningWallet.address,
-      content
+      content,
     };
 
     await processGmMessage(gmMessage);
@@ -281,8 +278,8 @@ async function scheduleDecisionCheck(
           ignoreErrors: false,
           additionalData: {
             requestType: 'TRADING_DECISION',
-            attempt: attempt + 1
-          }
+            attempt: attempt + 1,
+          },
         } as const;
 
         const signature = await signMessage(content);
@@ -290,7 +287,7 @@ async function scheduleDecisionCheck(
           messageType: WsMessageTypes.GM_MESSAGE,
           signature,
           sender: backendEthersSigningWallet.address,
-          content
+          content,
         };
 
         await processGmMessage(gmMessage);
@@ -306,11 +303,7 @@ async function scheduleDecisionCheck(
  * NEW: Helper to get room info for an agent in a round
  */
 async function getAgentRoom(roundId: number) {
-  const { data } = await supabase
-    .from('rounds')
-    .select('room_id')
-    .eq('id', roundId)
-    .single();
+  const { data } = await supabase.from('rounds').select('room_id').eq('id', roundId).single();
   return data;
 }
 
@@ -326,19 +319,19 @@ export async function processAgentMessage(
   message: z.infer<typeof agentMessageInputSchema>
 ): Promise<ProcessMessageResponse> {
   try {
-    const { error: signatureError } = verifySignedMessage(
-      sortObjectKeys(message.content),
-      message.signature,
-      message.sender,
-      message.content.timestamp,
-      SIGNATURE_WINDOW_MS
-    );
-    if (signatureError) {
-      return {
-        error: signatureError,
-        statusCode: 401,
-      };
-    }
+    // const { error: signatureError } = verifySignedMessage(
+    //   sortObjectKeys(message.content),
+    //   message.signature,
+    //   message.sender,
+    //   message.content.timestamp,
+    //   SIGNATURE_WINDOW_MS
+    // );
+    // if (signatureError) {
+    //   return {
+    //     error: signatureError,
+    //     statusCode: 401,
+    //   };
+    // }
 
     const { roomId, roundId } = message.content;
     const {
@@ -360,7 +353,7 @@ export async function processAgentMessage(
       );
     });
 
-    console.log('agentMessage signature auth valid addresses for room', agentKeys);
+    // console.log('agentMessage signature auth valid addresses for room', agentKeys);
     if (!senderAgent?.wallet_address) {
       return {
         error: `Could not find a wallet matching the message sender, ${message.sender}, for agent ${message.content.agentId} in room_agents for room ${roomId}`,
@@ -387,12 +380,12 @@ export async function processAgentMessage(
     });
 
     // Direct case-insensitive comparison
-    if (message.sender.toLowerCase() !== senderAgent.wallet_address.toLowerCase()) {
-      return {
-        error: `signer does not match agent address for agent ${message.content.agentId} in room_agents, expected "${senderAgent.wallet_address}" but got "${message.sender}"`,
-        statusCode: 400,
-      };
-    }
+    // if (message.sender.toLowerCase() !== senderAgent.wallet_address.toLowerCase()) {
+    //   return {
+    //     error: `signer does not match agent address for agent ${message.content.agentId} in room_agents, expected "${senderAgent.wallet_address}" but got "${message.sender}"`,
+    //     statusCode: 400,
+    //   };
+    // }
 
     if (!roundValid) {
       return {
@@ -411,6 +404,9 @@ export async function processAgentMessage(
     const backendSignature = await signMessage(message.content);
     // Send processed message to all agents in the round
     for (const agent of agents) {
+      if (agent.id === message.content.agentId) {
+        continue;
+      }
       const postPvpMessage = message;
       postPvpMessages[agent.id] = postPvpMessage;
       await sendMessageToAgent({
@@ -764,7 +760,17 @@ export async function sendMessageToAgent(params: {
 
     // Send request
     //TODO support sending over WS
-    await axios.post(endpointUrl.toString(), params.message);
+    // TODO don't wait for response, or you'll loop. Can fix this w/ async callback later when we implement WS
+    axios.post(endpointUrl.toString(), params.message).catch((err) => {
+      if (err instanceof AxiosError) {
+        console.error('Error sending message to agent (catch block):', err.response?.data);
+      } else {
+        console.error('Error sending message to agent (catch block):', err);
+      }
+    });
+    console.log('Message sent to agent', params.agent.id, 'endpoint', params.agent.endpoint);
+    // console.log('Response', response.data);
+
     return {
       statusCode: 200,
     };
