@@ -12,7 +12,7 @@ import { messagesRoutes } from './routes/messageRoutes';
 import { roundRoutes } from './routes/roundRoutes';
 import { WsMessageTypes } from './types/ws';
 import { AllInputSchemaTypes } from './utils/schemas';
-
+import { startContractEventListener} from './contract-event-listener';
 // Add type declaration for the custom property
 declare module 'fastify' {
   interface FastifyRequest {
@@ -38,7 +38,7 @@ server.register(async function(fastify) {
   // Base routes
   fastify.get('/', async () => ({ hello: 'world' }));
   fastify.get('/ping', async () => 'pong\n');
-  
+
   // Protected route example
   fastify.post('/protected-hello', {
     preHandler: signatureVerificationPlugin,
@@ -129,6 +129,7 @@ const start = async () => {
 };
 
 start();
+startContractEventListener();
 
 const job = new CronJob('*/10 * * * * *', checkAndCreateRounds);
 job.start();

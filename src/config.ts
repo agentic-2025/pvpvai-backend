@@ -37,7 +37,6 @@ export let contractClient: GameContracts;
       'APPLICATION_CONTRACT_ADDRESS not found in environment variables, cannot initialize contract client'
     );
     return;
-    
   }
   const coreAddress = rawCoreAddress as Address;
 

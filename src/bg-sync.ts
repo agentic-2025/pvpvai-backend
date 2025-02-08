@@ -1,8 +1,6 @@
-/* 
-  Background process that closes and opens new rounds as needed
-*/
-import { z } from 'zod';
 import { backendEthersSigningWallet, supabase } from './config';
+// import { roundService } from '../services/roundService';
+import { z } from 'zod';
 import { getRoomContract } from './room-contract';
 import { Database } from './types/database.types';
 import { WsMessageTypes } from './types/ws';
@@ -49,7 +47,7 @@ export async function createNewRound(
     }
 
     console.log('new round created', newRound);
-    console.log('calling contract #{contract_address} startRound');
+    console.log(`calling contract ${room.contract_address} startRound`);
 
     const contract = getRoomContract(room.contract_address);
     const tx = await contract.startRound();

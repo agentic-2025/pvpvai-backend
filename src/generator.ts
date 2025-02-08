@@ -1,21 +1,22 @@
 import { createClient } from '@supabase/supabase-js';
 import axios, { AxiosError } from 'axios';
-import { Wallet } from 'ethers';
+import { ethers, Wallet } from 'ethers';
 import { WebSocket } from 'ws';
 import { z } from 'zod';
 import { backendEthersSigningWallet } from './config';
+import { roomAbi } from './types/contract.types';
 import { Database } from './types/database.types';
 import { WsMessageTypes } from './types/ws';
 import {
   agentMessageInputSchema,
   gmMessageInputSchema,
-  observationMessageContentSchema,
   observationMessageInputSchema,
   ObservationType,
   participantsInputMessageSchema,
   publicChatMessageInputSchema,
   subscribeRoomInputMessageSchema,
 } from './utils/schemas';
+import { signPayload } from './utils/signer';
 import { sortObjectKeys } from './utils/sortObjectKeys';
 
 const supabase = createClient<Database>(
@@ -31,10 +32,11 @@ const CONNECTIONS_PER_USER = 5;
 const RECONNECT_INTERVAL = 10000;
 const BAD_MESSAGE_PROBABILITY = 0.005;
 const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3000';
+const PVP_ACTION_PROBABILITY = 0.05; // 5% chance of PVP action when message is generated
 
 // Message type configuration flags - can be modified inline
 const MESSAGE_TYPE_CONFIG = {
-  PUBLIC_CHAT: false,
+  PUBLIC_CHAT: true,
   PARTICIPANTS: false,
   GM_MESSAGES: false,
   AGENT_MESSAGES: true,
@@ -47,8 +49,8 @@ const BASE_PROBABILITIES = {
   PUBLIC_CHAT: 0.2,
   PARTICIPANTS: 0.03,
   GM_MESSAGES: 0.1,
-  AGENT_MESSAGES: 0.4,
-  OBSERVATIONS: 0.15,
+  AGENT_MESSAGES: 0.3,
+  OBSERVATIONS: 0.1,
 } as const;
 
 const randomDelay = () => Math.floor(Math.random() * (MAX_DELAY - MIN_DELAY + 1)) + MIN_DELAY;
@@ -282,6 +284,40 @@ function setProbabilities(probs: Partial<typeof BASE_PROBABILITIES>) {
 // To change probabilities:
 // setProbabilities({ PUBLIC_CHAT: 0.5, GM_MESSAGES: 0.5 });
 
+function stringToHex(str: string): string {
+  return ethers.hexlify(ethers.toUtf8Bytes(str));
+}
+
+async function invokePvpAction(wallet: ethers.Wallet, targetAddress: string) {
+  const provider = new ethers.JsonRpcProvider(process.env.BASE_SEPOLIA_RPC_URL);
+  const contract = new ethers.Contract(
+    '0x9Bd805b04809AeE006Eb05572AAFB2807A03eCDb',
+    roomAbi,
+    wallet.connect(provider)
+  );
+
+  // Always use attack for demo
+  const verb = 'attack';
+
+  // Match the attack action schema parameters
+  const parameters = {
+    target: targetAddress,
+    message: 'This is a test attack',
+  };
+
+  try {
+    const tx = await contract.invokePvpAction(
+      targetAddress,
+      verb,
+      stringToHex(JSON.stringify(parameters))
+    );
+    console.log(`Invoked PVP action ${verb}:`, tx.hash);
+    await tx.wait();
+  } catch (error) {
+    console.error('Error invoking PVP action:', error);
+  }
+}
+
 // At the top of the file, define our agent keys and their mappings
 
 const AGENT_KEYS = {
@@ -482,9 +518,7 @@ async function generateMessages() {
               text: getRandomMessage(),
               timestamp: Date.now(),
             };
-            const signature = await activeConnection.wallet.signMessage(
-              JSON.stringify(sortObjectKeys(content))
-            );
+            const signature = await signPayload(activeConnection.wallet, content);
 
             message = {
               messageType: WsMessageTypes.PUBLIC_CHAT,
@@ -518,9 +552,7 @@ async function generateMessages() {
               message: getRandomGMMessage(),
             };
 
-            const signature = await backendEthersSigningWallet.signMessage(
-              JSON.stringify(sortObjectKeys(content))
-            );
+            const signature = await signPayload(backendEthersSigningWallet, content);
 
             message = {
               messageType: WsMessageTypes.GM_MESSAGE,
@@ -532,9 +564,16 @@ async function generateMessages() {
             // 12.5% for agent messages
             // Agent message via POST
             try {
-              // Get next agent in rotation instead of random selection
-              const { wallet: agentWallet, agentId } = getNextAgent();
-              console.log(`Selected Agent ${agentId} (${agentWallet.address}) for message`);
+              // Convert wallet address to lowercase before lookup
+              let agentId = keyMap[activeConnection.wallet.address.toLowerCase()];
+              // If no mapping exists, use a fallback random agent id from [37, 38, 39]
+              if (agentId === undefined) {
+                const fallbackAgentIds = [37, 38, 39];
+                agentId = fallbackAgentIds[Math.floor(Math.random() * fallbackAgentIds.length)];
+                console.log(
+                  `No mapping for wallet ${activeConnection.wallet.address}. Using fallback agentId ${agentId}`
+                );
+              }
 
               const content = {
                 timestamp: Date.now(),
@@ -544,14 +583,10 @@ async function generateMessages() {
                 text: getRandomAgentMessage(),
               };
 
-              console.log(
-                `Sending agent message from Agent ${agentId} (${agentWallet.address}):`,
-                content
-              );
-              const signature = await agentWallet.signMessage(
-                JSON.stringify(sortObjectKeys(content))
-              );
+              console.log('Sending agent message with content:', content);
+              const signature = await signPayload(activeConnection.wallet, content);
 
+              console.log('activeConnection.wallet.address', activeConnection.wallet.address);
               const message: z.infer<typeof agentMessageInputSchema> = {
                 messageType: WsMessageTypes.AGENT_MESSAGE,
                 sender: agentWallet.address,
@@ -583,16 +618,21 @@ async function generateMessages() {
                   Math.floor(Math.random() * Object.values(ObservationType).length)
                 ];
 
-              const observationData = getRandomObservation(observationType);
-              // Validate the data matches the schema
-              const validatedData = observationMessageContentSchema.parse({
+              const content = {
+                agentId:
+                  keyMap[activeConnection.wallet.address.toLowerCase()] ??
+                  [37, 38, 39][Math.floor(Math.random() * 3)],
                 timestamp: Date.now(),
                 roomId: roomAndRound.roomId,
                 roundId: roomAndRound.roundId,
                 agentId: keyMap[activeConnection.wallet.address] || 57,
                 observationType,
-                data: observationData,
-              });
+                data: getRandomObservation(observationType),
+              };
+
+              console.log('Sending observation message with content:', content);
+
+              const signature = await signPayload(activeConnection.wallet, content);
 
               const observationMessage = observationMessageInputSchema.parse({
                 messageType: 'observation',
@@ -622,6 +662,18 @@ async function generateMessages() {
               }
             } catch (error) {
               console.error('Error generating observation message:', error);
+            }
+          } else if (rand < PVP_ACTION_PROBABILITY) {
+            // Get a random target from the connections that isn't the sender
+            const possibleTargets = connections.filter(
+              (c) => c.wallet.address !== activeConnection.wallet.address
+            );
+
+            if (possibleTargets.length > 0) {
+              const targetConnection =
+                possibleTargets[Math.floor(Math.random() * possibleTargets.length)];
+
+              await invokePvpAction(activeConnection.wallet, targetConnection.wallet.address);
             }
           }
 

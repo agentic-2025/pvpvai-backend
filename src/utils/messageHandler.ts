@@ -20,12 +20,12 @@
 
 import axios, { AxiosError } from 'axios';
 import { z } from 'zod';
-import { backendEthersSigningWallet, SIGNATURE_WINDOW_MS, supabase, wsOps } from '../config';
+import { backendEthersSigningWallet, supabase, wsOps } from '../config';
 import { roomService } from '../services/roomService';
 import { roundService } from '../services/roundService';
 import { Tables } from '../types/database.types';
 import { WsMessageTypes } from '../types/ws';
-import { signMessage, verifySignedMessage } from './auth';
+import { signMessage } from './auth';
 import {
   agentMessageInputSchema,
   AllAgentChatMessageSchemaTypes,
@@ -624,25 +624,25 @@ export async function processGmMessage(
     }
 
     // Verify signature
-    const { signer, error: signatureError } = verifySignedMessage(
-      message.content,
-      message.signature,
-      sender,
-      message.content.timestamp,
-      SIGNATURE_WINDOW_MS
-    );
-    if (signatureError) {
-      return {
-        error: signatureError,
-        statusCode: 401,
-      };
-    }
-    if (signer !== backendEthersSigningWallet.address && signer !== gameMaster.sol_wallet_address) {
-      return {
-        error: "Signer does not match the game master's signing wallet",
-        statusCode: 401,
-      };
-    }
+    // const { signer, error: signatureError } = verifySignedMessage(
+    //   message.content,
+    //   message.signature,
+    //   sender,
+    //   message.content.timestamp,
+    //   SIGNATURE_WINDOW_MS
+    // );
+    // if (signatureError) {
+    //   return {
+    //     error: signatureError,
+    //     statusCode: 401,
+    //   };
+    // }
+    // if (signer !== backendEthersSigningWallet.address && signer !== gameMaster.sol_wallet_address) {
+    //   return {
+    //     error: "Signer does not match the game master's signing wallet",
+    //     statusCode: 401,
+    //   };
+    // }
 
     // Check if any of the targets of the message are not in the room history.
     // GM cannot message targets that have never been in the room

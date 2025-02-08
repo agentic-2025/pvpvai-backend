@@ -312,10 +312,10 @@ export const gmMessageAiChatOutputSchema = gmMessageInputSchema; // GM messages 
   - After the user has finished their wallet interaction, they may eagerly send a message to the backend saying they placed the transaction.
   - The backend can then echo the message to that user individually so the user gets early feedback when they took an action
  */
-const durationOptionsSchema = z.union([z.literal(5), z.literal(10), z.literal(30)]);
+export const durationOptionsSchema = z.union([z.literal(5), z.literal(10), z.literal(30)]);
 
 // Create schemas for each PvP action type
-const amnesiaActionSchema = z.object({
+export const amnesiaActionSchema = z.object({
   actionType: z.literal(PvpActions.AMNESIA),
   actionCategory: z.literal(PvpActionCategories.DIRECT_ACTION),
   parameters: z.object({
@@ -323,57 +323,57 @@ const amnesiaActionSchema = z.object({
   }),
 });
 
-const attackActionSchema = z.object({
+export const attackActionSchema = z.object({
   actionType: z.literal(PvpActions.ATTACK),
   actionCategory: z.literal(PvpActionCategories.DIRECT_ACTION),
   parameters: z.object({
-    target: z.number(),
+    target: z.string(),
     message: z.string(),
   }),
 });
 
-const deceiveStatusSchema = z.object({
+export const deceiveStatusSchema = z.object({
   actionType: z.literal(PvpActions.DECEIVE),
   actionCategory: z.literal(PvpActionCategories.STATUS_EFFECT),
   parameters: z.object({
-    target: z.number(),
+    target: z.string(),
     duration: durationOptionsSchema,
     newPersona: z.string(),
   }),
 });
 
-const blindStatusSchema = z.object({
+export const blindStatusSchema = z.object({
   actionType: z.literal(PvpActions.BLIND),
   actionCategory: z.literal(PvpActionCategories.STATUS_EFFECT),
   parameters: z.object({
-    target: z.number(),
+    target: z.string(),
     duration: durationOptionsSchema,
   }),
 });
 
-const silenceStatusSchema = z.object({
+export const silenceStatusSchema = z.object({
   actionType: z.literal(PvpActions.SILENCE),
   actionCategory: z.literal(PvpActionCategories.STATUS_EFFECT),
   parameters: z.object({
-    target: z.number(),
+    target: z.string(),
     duration: durationOptionsSchema,
   }),
 });
 
-const deafenStatusSchema = z.object({
+export const deafenStatusSchema = z.object({
   actionType: z.literal(PvpActions.DEAFEN),
   actionCategory: z.literal(PvpActionCategories.STATUS_EFFECT),
   parameters: z.object({
-    target: z.number(),
+    target: z.string(),
     duration: durationOptionsSchema,
   }),
 });
 
-const poisonStatusSchema = z.object({
+export const poisonStatusSchema = z.object({
   actionType: z.literal(PvpActions.POISON),
   actionCategory: z.literal(PvpActionCategories.STATUS_EFFECT),
   parameters: z.object({
-    target: z.number(),
+    target: z.string(),
     duration: durationOptionsSchema,
     find: z.string(),
     replace: z.string(),
@@ -382,7 +382,7 @@ const poisonStatusSchema = z.object({
 });
 
 // Combine all action schemas
-const pvpActionSchema = z.discriminatedUnion('actionType', [
+export const pvpActionSchema = z.discriminatedUnion('actionType', [
   amnesiaActionSchema,
   attackActionSchema,
   deceiveStatusSchema,
@@ -411,9 +411,8 @@ export const pvpActionEnactedAiChatOutputSchema = z.object({
     timestamp: z.number(),
     roomId: z.number(),
     roundId: z.number(),
-    instigator: z.number(),
-    instigatorAddress: z.string(),
-    txHash: z.string(),
+    instigator: z.string(),
+    txHash: z.string().optional(),
     fee: z.number().optional(),
     action: pvpActionSchema,
   }),

@@ -1,79 +1,70 @@
 /**
  * Round Management Routes
- * 
+ *
  * Handles all round-related operations including:
  * - Round state changes (end/start)
  * - Participant management (kick)
  * - PvP system interactions (apply/remove effects)
- * 
+ *
  * Security:
  * - All routes validate roundId format
  * - PvP actions require duration limits
  * - Effect removal requires valid effectId
  */
 import { FastifyInstance } from 'fastify';
-import { roundController } from '../controllers/roundController';
-import {
-  endRoundSchema,
-  KickParticipant,
-  kickParticipantSchema,
-  RoundMessage,
-  roundMessageInputSchema,
-  RoundOutcome,
-} from '../utils/schemas';
-import { PvpActions } from '../types/pvp';
 import { supabase } from '../config';
-
+import { roundController } from '../controllers/roundController';
+import { PvpActions } from '../types/pvp';
+import { KickParticipant, kickParticipantSchema } from '../utils/schemas';
 
 export async function roundRoutes(server: FastifyInstance) {
+  server.get<{
+    Params: { roomId: string };
+  }>(
+    '/active',
+    {
+      schema: {
+        params: {
+          type: 'object',
+          required: ['roomId'],
+          properties: {
+            roomId: { type: 'string', pattern: '^[0-9]+$' },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const roomId = parseInt(request.params.roomId);
 
-server.get<{
-  Params: { roomId: string };
-}>(
-  '/active',
-  {
-    schema: {
-      params: {
-        type: 'object',
-        required: ['roomId'],
-        properties: {
-          roomId: { type: 'string', pattern: '^[0-9]+$' }
+      try {
+        const { data: activeRound, error } = await supabase
+          .from('rounds')
+          .select('*')
+          .eq('room_id', roomId)
+          .eq('active', true)
+          .single();
+
+        if (error) {
+          console.error('Active round fetch error:', error);
+          return reply.status(404).send({
+            success: false,
+            error: 'No active round found for this room',
+          });
         }
-      }
-    }
-  },
-  async (request, reply) => {
-    const roomId = parseInt(request.params.roomId);
 
-    try {
-      const { data: activeRound, error } = await supabase
-        .from('rounds')
-        .select('*')
-        .eq('room_id', roomId)
-        .eq('active', true)
-        .single();
-
-      if (error) {
-        console.error('Active round fetch error:', error);
-        return reply.status(404).send({
-          success: false, 
-          error: 'No active round found for this room'
+        return reply.send({
+          success: true,
+          data: activeRound,
+        });
+      } catch (error) {
+        console.error('Error fetching active round:', error);
+        return reply.status(500).send({
+          success: false,
+          error: 'Failed to fetch active round',
         });
       }
-
-      return reply.send({
-        success: true,
-        data: activeRound
-      });
-    } catch (error) {
-      console.error('Error fetching active round:', error);
-      return reply.status(500).send({
-        success: false,
-        error: 'Failed to fetch active round'
-      });
     }
-  }
-);
+  );
 
   /**
    * Kick Participant Endpoint
@@ -111,7 +102,7 @@ server.get<{
   /**
    * Apply PvP Action Endpoint
    * Adds a new PvP effect to specified agent
-   * 
+   *
    * Effects:
    * - SILENCE: Prevents message sending
    * - DEAFEN: Blocks message receiving
@@ -122,10 +113,11 @@ server.get<{
     Params: { roundId: string };
     Body: {
       actionType: PvpActions;
-      sourceId: string;     // User who initiated the action
-      targetId: number;     // Agent being targeted
-      duration: number;     // Duration in milliseconds
-      details?: {          // Optional details for POISON effect
+      sourceId: string; // User who initiated the action
+      targetId: number; // Agent being targeted
+      duration: number; // Duration in milliseconds
+      details?: {
+        // Optional details for POISON effect
         find: string;
         replace: string;
         case_sensitive?: boolean;
@@ -139,16 +131,16 @@ server.get<{
           type: 'object',
           required: ['roundId'],
           properties: {
-            roundId: { type: 'string', pattern: '^[0-9]+$' }
-          }
+            roundId: { type: 'string', pattern: '^[0-9]+$' },
+          },
         },
         body: {
           type: 'object',
           required: ['actionType', 'sourceId', 'targetId', 'duration'],
           properties: {
-            actionType: { 
-              type: 'string', 
-              enum: ['SILENCE', 'DEAFEN', 'POISON', 'ATTACK'] 
+            actionType: {
+              type: 'string',
+              enum: ['SILENCE', 'DEAFEN', 'POISON', 'ATTACK'],
             },
             sourceId: { type: 'string' },
             targetId: { type: 'number' },
@@ -158,17 +150,17 @@ server.get<{
               properties: {
                 find: { type: 'string' },
                 replace: { type: 'string' },
-                case_sensitive: { type: 'boolean' }
-              }
-            }
-          }
-        }
-      }
+                case_sensitive: { type: 'boolean' },
+              },
+            },
+          },
+        },
+      },
     },
     async (request, reply) => {
       const roundId = parseInt(request.params.roundId);
       const pvpAction = request.body;
-      
+
       try {
         const result = await roundController.applyPvPAction(roundId, pvpAction);
         if (!result.success) {
@@ -177,8 +169,8 @@ server.get<{
         return reply.send({ success: true, data: result.data });
       } catch (error) {
         request.log.error('Error applying PvP action:', error);
-        return reply.status(500).send({ 
-          error: 'Internal server error applying PvP action' 
+        return reply.status(500).send({
+          error: 'Internal server error applying PvP action',
         });
       }
     }
@@ -189,7 +181,7 @@ server.get<{
    * Manually cancels an active PvP effect before expiration
    */
   server.delete<{
-    Params: { 
+    Params: {
       roundId: string;
       effectId: string;
     };
@@ -202,27 +194,24 @@ server.get<{
           required: ['roundId', 'effectId'],
           properties: {
             roundId: { type: 'string', pattern: '^[0-9]+$' },
-            effectId: { type: 'string' }
-          }
-        }
-      }
+            effectId: { type: 'string' },
+          },
+        },
+      },
     },
     async (request, reply) => {
       const { roundId, effectId } = request.params;
-      
+
       try {
-        const result = await roundController.removePvPEffect(
-          parseInt(roundId), 
-          effectId
-        );
+        const result = await roundController.removePvPEffect(parseInt(roundId), effectId);
         if (!result.success) {
           return reply.status(400).send({ error: result.error });
         }
         return reply.send({ success: true });
       } catch (error) {
         request.log.error('Error removing PvP effect:', error);
-        return reply.status(500).send({ 
-          error: 'Internal server error removing PvP effect' 
+        return reply.status(500).send({
+          error: 'Internal server error removing PvP effect',
         });
       }
     }
@@ -230,7 +219,7 @@ server.get<{
 
   // Fix: Support both roomId and roundId parameters
   server.get<{
-    Params: { 
+    Params: {
       roomId: string;
       roundId: string;
     };
@@ -246,23 +235,25 @@ server.get<{
           required: ['roomId', 'roundId'],
           properties: {
             roomId: { type: 'string', pattern: '^[0-9]+$' },
-            roundId: { type: 'string', pattern: '^[0-9]+$' }
-          }
+            roundId: { type: 'string', pattern: '^[0-9]+$' },
+          },
         },
         querystring: {
           type: 'object',
           properties: {
-            detail: { type: 'string', enum: ['full', 'state'] }
-          }
-        }
-      }
+            detail: { type: 'string', enum: ['full', 'state'] },
+          },
+        },
+      },
     },
     async (request, reply) => {
       const roundId = parseInt(request.params.roundId);
       const roomId = parseInt(request.params.roomId);
       const { detail } = request.query;
 
-      console.log(`Processing round request - Room: ${roomId}, Round: ${roundId}, Detail: ${detail}`);
+      console.log(
+        `Processing round request - Room: ${roomId}, Round: ${roundId}, Detail: ${detail}`
+      );
 
       try {
         // If detail=state, return round state
@@ -287,19 +278,19 @@ server.get<{
 
         if (error) {
           console.error('Round fetch error:', error);
-          return reply.status(404).send({ 
-            error: 'Round not found or does not belong to specified room' 
+          return reply.status(404).send({
+            error: 'Round not found or does not belong to specified room',
           });
         }
 
         return reply.send({
           success: true,
-          data: round
+          data: round,
         });
       } catch (error) {
         console.error('Error fetching round:', error);
-        return reply.status(500).send({ 
-          error: 'Failed to fetch round details' 
+        return reply.status(500).send({
+          error: 'Failed to fetch round details',
         });
       }
     }
