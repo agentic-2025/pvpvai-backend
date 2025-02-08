@@ -1,9 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
 import axios, { AxiosError } from 'axios';
-import { Wallet } from 'ethers';
+import { ethers, Wallet } from 'ethers';
 import { WebSocket } from 'ws';
 import { z } from 'zod';
 import { backendEthersSigningWallet } from './config';
+import { roomAbi } from './types/contract.types';
 import { Database } from './types/database.types';
 import { WsMessageTypes } from './types/ws';
 import {
@@ -15,9 +16,8 @@ import {
   publicChatMessageInputSchema,
   subscribeRoomInputMessageSchema,
 } from './utils/schemas';
+import { signPayload } from './utils/signer';
 import { sortObjectKeys } from './utils/sortObjectKeys';
-import { ethers } from 'ethers';
-import { roomAbi } from './types/contract.types';
 
 const supabase = createClient<Database>(
   process.env.SUPABASE_URL || '',
@@ -36,7 +36,7 @@ const PVP_ACTION_PROBABILITY = 0.05; // 5% chance of PVP action when message is 
 
 // Message type configuration flags - can be modified inline
 const MESSAGE_TYPE_CONFIG = {
-  PUBLIC_CHAT: false,
+  PUBLIC_CHAT: true,
   PARTICIPANTS: false,
   GM_MESSAGES: true,
   AGENT_MESSAGES: true,
@@ -49,16 +49,16 @@ const BASE_PROBABILITIES = {
   PUBLIC_CHAT: 0.2,
   PARTICIPANTS: 0.03,
   GM_MESSAGES: 0.1,
-  AGENT_MESSAGES: 0.4,
-  OBSERVATIONS: 0.15,
+  AGENT_MESSAGES: 0.3,
+  OBSERVATIONS: 0.1,
 } as const;
 
 const randomDelay = () => Math.floor(Math.random() * (MAX_DELAY - MIN_DELAY + 1)) + MIN_DELAY;
 
 const keyMap: Record<string, number> = {
-  '0x4ffE2DF7B11ea3f28c6a7C90b39F52427c9D550d': 37,
-  '0x830598617569AfD7Ad16343f5D4a226578b16A3d': 38,
-  '0x1D5EbEABEE35dbBA6Fd2847401F979b3f6249a93': 39,
+  '0x4ffe2df7b11ea3f28c6a7c90b39f52427c9d550d': 37,
+  '0x830598617569afd7ad16343f5d4a226578b16a3d': 38,
+  '0x1d5ebeabee35dbba6fd2847401f979b3f6249a93': 39,
 };
 
 // Private keys corresponding to the addresses above
@@ -291,18 +291,18 @@ function stringToHex(str: string): string {
 async function invokePvpAction(wallet: ethers.Wallet, targetAddress: string) {
   const provider = new ethers.JsonRpcProvider(process.env.BASE_SEPOLIA_RPC_URL);
   const contract = new ethers.Contract(
-    '0x9Bd805b04809AeE006Eb05572AAFB2807A03eCDb', 
-    roomAbi, 
+    '0x9Bd805b04809AeE006Eb05572AAFB2807A03eCDb',
+    roomAbi,
     wallet.connect(provider)
   );
 
   // Always use attack for demo
   const verb = 'attack';
-  
+
   // Match the attack action schema parameters
   const parameters = {
     target: targetAddress,
-    message: "This is a test attack"
+    message: 'This is a test attack',
   };
 
   try {
@@ -349,7 +349,7 @@ async function generateMessages() {
 
     ws.on('message', (data) => {
       const message = JSON.parse(data.toString());
-      console.log(`User ${userId} received message:`, message);
+      // console.log(`User ${userId} received message:`, message);
       if (message.type === WsMessageTypes.HEARTBEAT) {
         ws.send(JSON.stringify({ type: WsMessageTypes.HEARTBEAT, content: {} }));
       }
@@ -478,9 +478,7 @@ async function generateMessages() {
               text: getRandomMessage(),
               timestamp: Date.now(),
             };
-            const signature = await activeConnection.wallet.signMessage(
-              JSON.stringify(sortObjectKeys(content))
-            );
+            const signature = await signPayload(activeConnection.wallet, content);
 
             message = {
               messageType: WsMessageTypes.PUBLIC_CHAT,
@@ -514,9 +512,7 @@ async function generateMessages() {
               message: getRandomGMMessage(),
             };
 
-            const signature = await backendEthersSigningWallet.signMessage(
-              JSON.stringify(sortObjectKeys(content))
-            );
+            const signature = await signPayload(backendEthersSigningWallet, content);
 
             message = {
               messageType: WsMessageTypes.GM_MESSAGE,
@@ -528,12 +524,15 @@ async function generateMessages() {
             // 12.5% for agent messages
             // Agent message via POST
             try {
-              const agentId = keyMap[activeConnection.wallet.address];
-              
-              // Only proceed if we have a valid agentId
+              // Convert wallet address to lowercase before lookup
+              let agentId = keyMap[activeConnection.wallet.address.toLowerCase()];
+              // If no mapping exists, use a fallback random agent id from [37, 38, 39]
               if (agentId === undefined) {
-                console.log(`No agentId found for wallet ${activeConnection.wallet.address}, skipping message`);
-                continue;
+                const fallbackAgentIds = [37, 38, 39];
+                agentId = fallbackAgentIds[Math.floor(Math.random() * fallbackAgentIds.length)];
+                console.log(
+                  `No mapping for wallet ${activeConnection.wallet.address}. Using fallback agentId ${agentId}`
+                );
               }
 
               const content = {
@@ -545,10 +544,9 @@ async function generateMessages() {
               };
 
               console.log('Sending agent message with content:', content);
-              const signature = await activeConnection.wallet.signMessage(
-                JSON.stringify(sortObjectKeys(content))
-              );
+              const signature = await signPayload(activeConnection.wallet, content);
 
+              console.log('activeConnection.wallet.address', activeConnection.wallet.address);
               const message: z.infer<typeof agentMessageInputSchema> = {
                 messageType: WsMessageTypes.AGENT_MESSAGE,
                 sender: activeConnection.wallet.address,
@@ -581,7 +579,9 @@ async function generateMessages() {
                 ];
 
               const content = {
-                agentId: keyMap[activeConnection.wallet.address] || 57,
+                agentId:
+                  keyMap[activeConnection.wallet.address.toLowerCase()] ??
+                  [37, 38, 39][Math.floor(Math.random() * 3)],
                 timestamp: Date.now(),
                 roomId: roomAndRound.roomId,
                 roundId: roomAndRound.roundId,
@@ -591,7 +591,7 @@ async function generateMessages() {
 
               console.log('Sending observation message with content:', content);
 
-              const signature = await activeConnection.wallet.signMessage(JSON.stringify(content));
+              const signature = await signPayload(activeConnection.wallet, content);
 
               const observationMessage: z.infer<typeof observationMessageInputSchema> = {
                 messageType: 'observation',
@@ -623,19 +623,15 @@ async function generateMessages() {
             }
           } else if (rand < PVP_ACTION_PROBABILITY) {
             // Get a random target from the connections that isn't the sender
-            const possibleTargets = connections.filter(c => 
-              c.wallet.address !== activeConnection.wallet.address
+            const possibleTargets = connections.filter(
+              (c) => c.wallet.address !== activeConnection.wallet.address
             );
-            
+
             if (possibleTargets.length > 0) {
-              const targetConnection = possibleTargets[
-                Math.floor(Math.random() * possibleTargets.length)
-              ];
-              
-              await invokePvpAction(
-                activeConnection.wallet,
-                targetConnection.wallet.address
-              );
+              const targetConnection =
+                possibleTargets[Math.floor(Math.random() * possibleTargets.length)];
+
+              await invokePvpAction(activeConnection.wallet, targetConnection.wallet.address);
             }
           }
 

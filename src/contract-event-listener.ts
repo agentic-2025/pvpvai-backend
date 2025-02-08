@@ -13,7 +13,7 @@ import {
 } from './utils/schemas';
 import { wsOps } from './ws/operations';
 
-import axios from 'axios';
+import { Database } from './types/database.types';
 console.log('Starting contract event listener');
 
 // Base Sepolia RPC URL (Use Alchemy, Infura, or Public RPC)
@@ -144,11 +144,13 @@ export function startContractEventListener() {
       await wsOps.broadcastToAiChat({
         roomId: 15,
         record: {
-          ...pvpActionMessage,
-          agent_id: 57,
+          agent_id: 57, //TODO hardcoding so bad, feels so bad, profound sadness, mama GM
           message: pvpActionMessage,
-          round_id: round.id, //TODO hardcoding so bad, feels so bad, profound sadness
-        },
+          round_id: round.id,
+          message_type: WsMessageTypes.PVP_ACTION_ENACTED,
+          original_author: null,
+          pvp_status_effects: {}, // Our contract is the source of truth, this field is an artifact
+        } satisfies Database['public']['Tables']['round_agent_messages']['Insert'],
       });
     }
   );

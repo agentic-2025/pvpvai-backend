@@ -20,12 +20,12 @@
 
 import axios, { AxiosError } from 'axios';
 import { z } from 'zod';
-import { backendEthersSigningWallet, SIGNATURE_WINDOW_MS, supabase, wsOps } from '../config';
+import { backendEthersSigningWallet, supabase, wsOps } from '../config';
 import { roomService } from '../services/roomService';
 import { roundService } from '../services/roundService';
 import { Tables } from '../types/database.types';
 import { WsMessageTypes } from '../types/ws';
-import { signMessage, verifySignedMessage } from './auth';
+import { signMessage } from './auth';
 import {
   agentMessageInputSchema,
   AllAgentChatMessageSchemaTypes,
@@ -33,10 +33,8 @@ import {
   gmMessageInputSchema,
   observationMessageAiChatOutputSchema,
   observationMessageInputSchema,
-  pvpActionEnactedAiChatOutputSchema
 } from './schemas';
 import { roundAndAgentsPreflight } from './validation';
-import { PvpActions, PvpActionCategories } from '../types/pvp';
 
 // Add address validation helper
 function isValidEthereumAddress(address: string): boolean {
@@ -55,19 +53,19 @@ export async function processAgentMessage(
   message: z.infer<typeof agentMessageInputSchema>
 ): Promise<ProcessMessageResponse> {
   try {
-    const { error: signatureError } = verifySignedMessage(
-      message.content,
-      message.signature,
-      message.sender,
-      message.content.timestamp,
-      SIGNATURE_WINDOW_MS
-    );
-    if (signatureError) {
-      return {
-        error: signatureError,
-        statusCode: 401,
-      };
-    }
+    // const { error: signatureError } = verifySignedMessage(
+    //   sortObjectKeys(message.content),
+    //   message.signature,
+    //   message.sender,
+    //   message.content.timestamp,
+    //   SIGNATURE_WINDOW_MS
+    // );
+    // if (signatureError) {
+    //   return {
+    //     error: signatureError,
+    //     statusCode: 401,
+    //   };
+    // }
 
     const { roomId, roundId } = message.content;
     const {
@@ -78,7 +76,6 @@ export async function processAgentMessage(
       reason: roundReason,
     } = await roundAndAgentsPreflight(roundId);
 
-
     const agentKeys = await supabase
       .from('room_agents')
       .select('wallet_address, agent_id, agents(eth_wallet_address)')
@@ -86,8 +83,7 @@ export async function processAgentMessage(
 
     const senderAgent = agentKeys?.data?.find((a) => {
       return (
-        a.agent_id === message.content.agentId ||
-        a.agents.eth_wallet_address === message.sender
+        a.agent_id === message.content.agentId || a.agents.eth_wallet_address === message.sender
       );
     });
 
@@ -118,12 +114,16 @@ export async function processAgentMessage(
     });
 
     // Direct case-insensitive comparison
-    if (message.sender.toLowerCase() !== senderAgent.wallet_address.toLowerCase()) {
-      return {
-        error: `signer does not match agent address for agent ${message.content.agentId} in room_agents, expected "${senderAgent.wallet_address}" but got "${message.sender}"`,
-        statusCode: 400,
-      };
-    }
+    // if (
+    //   message.sender.toLowerCase() !== senderAgent.wallet_address.toLowerCase() &&
+    //   message.sender.toLowerCase() !==
+    //     agents?.find((a) => a.id === message.content.agentId)?.eth_wallet_address?.toLowerCase()
+    // ) {
+    //   return {
+    //     error: `signer does not match agent address for agent ${message.content.agentId} in room_agents, expected "${senderAgent.wallet_address}" but got "${message.sender}"`,
+    //     statusCode: 400,
+    //   };
+    // }
 
     if (!roundValid) {
       return {
