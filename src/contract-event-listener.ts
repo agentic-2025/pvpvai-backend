@@ -16,6 +16,9 @@ import { wsOps } from './ws/operations';
 import { Database } from './types/database.types';
 console.log('Starting contract event listener');
 
+
+const HARDCODED_ROOM = 16;
+
 // Base Sepolia RPC URL (Use Alchemy, Infura, or Public RPC)
 
 // Error in createNewRound: Error: network does not support ENS (operation="getEnsAddress",
@@ -66,7 +69,7 @@ export function startContractEventListener() {
   const provider = new ethers.JsonRpcProvider(process.env.BASE_SEPOLIA_RPC_URL);
 
   // Your deployed contract address
-  const contractAddress = '0x9Bd805b04809AeE006Eb05572AAFB2807A03eCDb';
+  const contractAddress = '0x1698f764C1d34315698D9D96Ded939e24587a3fB';
 
   // Create contract instance
   const contract = new ethers.Contract(contractAddress, roomAbi, provider);
@@ -122,13 +125,14 @@ export function startContractEventListener() {
       const pvpActionMessage = {
         messageType: WsMessageTypes.PVP_ACTION_ENACTED,
         sender: address,
+        signature: 'wowuschacoolsignature',
         content: pvpAction,
       };
 
       const { data: round, error: roundError } = await supabase
         .from('rounds')
         .select('id')
-        .eq('room_id', 15)
+        .eq('room_id', HARDCODED_ROOM)
         .eq('status', 'OPEN')
         .single();
 
@@ -142,7 +146,7 @@ export function startContractEventListener() {
       }
 
       await wsOps.broadcastToAiChat({
-        roomId: 15,
+        roomId: HARDCODED_ROOM,
         record: {
           agent_id: 57, //TODO hardcoding so bad, feels so bad, profound sadness, mama GM
           message: pvpActionMessage,

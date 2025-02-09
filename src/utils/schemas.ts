@@ -572,3 +572,33 @@ export type RoomAgentBulkAdd = z.infer<typeof agentBulkAddSchema>;
 export type RoundMessage = z.infer<typeof roundMessageInputSchema>;
 export type RoundOutcome = z.infer<typeof roundOutcomeSchema>;
 export type KickParticipant = z.infer<typeof kickParticipantSchema>;
+
+export const gmInstructDecisionInputSchema = z.object({
+  messageType: z.literal(WsMessageTypes.GM_INSTRUCT_DECISION),
+  signature: z.string(),
+  sender: z.string(),
+  content: z.object({
+    roomId: z.number(),
+    roundId: z.number(),
+  }),
+});
+
+enum DecisionType {
+  BUY = 1,
+  SELL = 2,
+  HOLD = 3,
+}
+
+
+export const agentDecisionAiChatOutputSchema = z.object({
+  messageType: z.literal(WsMessageTypes.AGENT_DECISION),
+  signature: z.string(),
+  sender: z.string(),
+  content: z.object({
+    timestamp: z.number(),
+    roomId: z.number(),
+    roundId: z.number(),
+    agentId: z.number(),
+    decision: z.nativeEnum(DecisionType),
+  }),
+});

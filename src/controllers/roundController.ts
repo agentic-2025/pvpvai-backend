@@ -394,13 +394,13 @@ export class RoundController {
         .eq('id', roundId)
         .single();
 
-      if (round?.status !== 'CLOSING') {
-        return {
-          success: false,
-          error: 'Trading decisions can only be made during round closing phase',
-          statusCode: 400
-        };
-      }
+      // if (round?.status !== 'CLOSING') {
+      //   return {
+      //     success: false,
+      //     error: 'Trading decisions can only be made during round closing phase',
+      //     statusCode: 400
+      //   };
+      // }
 
       // Record decision with timestamp
       const { error } = await supabase

@@ -8,7 +8,7 @@ export enum WsMessageTypes {
   // Sent by: Single user
   // Purpose: Response to a health check from the WS Server
   HEARTBEAT = 'heartbeat',
-  // Sent by: Single user 
+  // Sent by: Single user
   // Purpose: Get the total number of participants in the room to display in the UI
   PARTICIPANTS = 'participants',
 
@@ -21,6 +21,14 @@ export enum WsMessageTypes {
   // Sent by: ???
   // Purpose: Send a GM message to agents, must be treated with the highest priority to ensure round progresses
   GM_MESSAGE = 'gm_message',
+
+  // Sent by: GM
+  // Purpose: Instruct agents to submit their decision
+  GM_INSTRUCT_DECISION = 'gm_instruct_decision',
+
+  //Sent by: GM
+  // Purpose: tells agents to download the latest round and set context
+  GM_REINIT = 'gm_reinit',
 
   // Response to: Any WS input message
   // Recipients: Single user
@@ -52,6 +60,12 @@ export enum WsMessageTypes {
   // Recipients: N/A
   // Purpose: Not sent by anyone, just the type used for the payload of the request to POST /rooms
   CREATE_ROOM = 'create_room',
+
+  // Response to: POST request to /rounds
+  // Recipients: N/A
+  // Purpose: Not sent by anyone, just the type used for the payload of the request to POST /rounds
+  AGENT_NUDGE = 'agent_nudge',
+  AGENT_DECISION = 'agent_decision',
 }
 
 export interface AuthenticatedMessage {

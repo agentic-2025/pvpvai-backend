@@ -7,8 +7,9 @@
 // /messages/agentMessage: Was previously /rooms/:roomId/rounds/:roundId/aiChat
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { supabase } from '../config';
+import { supabase, wsOps } from '../config';
 import { roundController } from '../controllers/roundController';
+import { WsMessageTypes } from '../types/ws';
 import {
   processAgentMessage,
   processGmMessage,
@@ -190,17 +191,53 @@ export async function messagesRoutes(server: FastifyInstance) {
 
   server.post<{
     Body: {
-      roundId: number;
-      agentId: number;
-      decision: 1 | 2 | 3; // 1=BUY, 2=HOLD, 3=SELL
+      messageType: WsMessageTypes.AGENT_DECISION;
+      signature: string;
+      sender: string;
+      content: {
+        timestamp: number;
+        roomId: number;
+        roundId: number;
+        agentId: number;
+        decision: 1 | 2 | 3; // 1=BUY, 2=HOLD, 3=SELL
+      };
     };
   }>('/decision', async (request, reply) => {
     try {
+      const { messageType, signature, sender, content } = request.body;
+      if (messageType !== WsMessageTypes.AGENT_DECISION) {
+        return reply.status(400).send({
+          success: false,
+          error: 'Invalid message type',
+        });
+      }
+
       const result = await roundController.recordAgentDecision(
-        request.body.roundId,
-        request.body.agentId,
-        request.body.decision
+        content.roundId,
+        content.agentId,
+        content.decision
       );
+
+      wsOps.broadcastToAiChat({
+        roomId: content.roomId,
+        record: {
+          message_type: WsMessageTypes.AGENT_DECISION,
+          message: {
+            messageType: WsMessageTypes.AGENT_DECISION,
+            sender: sender,
+            signature: signature,
+            content: {
+              timestamp: content.timestamp,
+              roomId: content.roomId,
+              roundId: content.roundId,
+              agentId: content.agentId,
+              decision: content.decision,
+            },
+          },
+          agent_id: content.agentId,
+          round_id: content.roundId,
+        },
+      });
 
       return reply.status(result.statusCode).send({
         success: result.success,

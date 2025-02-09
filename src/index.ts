@@ -2,8 +2,9 @@ import cors from '@fastify/cors';
 import websocket from '@fastify/websocket';
 import { CronJob } from 'cron';
 import fastify from 'fastify';
-import { checkAndCloseRounds, checkAndCreateRounds } from './bg-sync';
+import { checkAndCloseRounds, checkAndCreateRounds, syncAgentsWithActiveRounds } from './bg-sync';
 import { wsOps } from './config';
+import { startContractEventListener } from './contract-event-listener';
 import { signatureVerificationPlugin } from './middleware/signatureVerification';
 import zodSchemaPlugin from './plugins/zodSchema';
 import roomsRoutes from './rooms';
@@ -12,14 +13,13 @@ import { messagesRoutes } from './routes/messageRoutes';
 import { roundRoutes } from './routes/roundRoutes';
 import { WsMessageTypes } from './types/ws';
 import { AllInputSchemaTypes } from './utils/schemas';
-import { startContractEventListener} from './contract-event-listener';
+import { agentMonitorService } from './services/agentMonitorService';
 // Add type declaration for the custom property
 declare module 'fastify' {
   interface FastifyRequest {
     verifiedAddress: string;
   }
 }
-
 
 const server = fastify({
   logger: true,
@@ -34,32 +34,36 @@ server.register(zodSchemaPlugin);
 server.register(websocket);
 
 // Register all routes with proper organization
-server.register(async function(fastify) {
+server.register(async function (fastify) {
   // Base routes
   fastify.get('/', async () => ({ hello: 'world' }));
   fastify.get('/ping', async () => 'pong\n');
 
   // Protected route example
-  fastify.post('/protected-hello', {
-    preHandler: signatureVerificationPlugin,
-  }, async (request, reply) => {
-    const body = request.body as any;
-    return {
-      message: 'Hello, verified user!',
-      account: body.account,
-      data: body.data,
-    };
-  });
+  fastify.post(
+    '/protected-hello',
+    {
+      preHandler: signatureVerificationPlugin,
+    },
+    async (request, reply) => {
+      const body = request.body as any;
+      return {
+        message: 'Hello, verified user!',
+        account: body.account,
+        data: body.data,
+      };
+    }
+  );
 
   // Fix: Update route registration to avoid conflicts
-  fastify.register(roomsRoutes, { prefix: '/rooms' });                  // Handles /rooms/
-  fastify.register(agentRoutes, { prefix: '/agents' });               // Handles /agents/
-  fastify.register(messagesRoutes, { prefix: '/messages' });          // Handles /messages/
+  fastify.register(roomsRoutes, { prefix: '/rooms' }); // Handles /rooms/
+  fastify.register(agentRoutes, { prefix: '/agents' }); // Handles /agents/
+  fastify.register(messagesRoutes, { prefix: '/messages' }); // Handles /messages/
   fastify.register(roundRoutes, { prefix: '/rooms/:roomId/rounds' }); // Handles /rooms/:roomId/rounds/*
 });
 
 // Register WebSocket handler
-server.register(async function(fastify) {
+server.register(async function (fastify) {
   fastify.get('/ws', { websocket: true }, (connection, req) => {
     const client = connection;
 
@@ -131,7 +135,10 @@ const start = async () => {
 start();
 startContractEventListener();
 
-const job = new CronJob('*/10 * * * * *', checkAndCreateRounds);
+const job = new CronJob('*/25 * * * * *', checkAndCreateRounds);
 job.start();
-const job2 = new CronJob('*/10 * * * * *', checkAndCloseRounds);
+const job2 = new CronJob('*/35 * * * * *', checkAndCloseRounds);
 job2.start();
+const job3 = new CronJob('*/15 * * * * *', syncAgentsWithActiveRounds);
+job3.start();
+agentMonitorService.start();
