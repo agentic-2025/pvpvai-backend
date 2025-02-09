@@ -100,6 +100,33 @@ export function startContractEventListener() {
         return;
       }
 
+      const { data: room, error: roomError } = await supabase
+      .from('rooms')
+      .select('id')
+      .eq('contract_address', contractAddress)
+      .single();
+
+      if (roomError) {
+        console.error('Error fetching room:', roomError);
+        return;
+      }
+
+     const { data: round, error: roundError } = await supabase
+      .from('rounds')
+      .select('id')
+      .eq('room_id', room.id)
+      .eq('status', 'OPEN')
+      .single();
+
+      if (roundError) {
+        if (roundError.code === 'PGRST106') {
+          console.error(`No open round found for room ${room.id}, skipping pvp notification`);
+          return;
+        }
+        console.error('Error fetching round:', roundError);
+        return;
+      }
+
       // Create a structured object matching your schema types
       const pvpAction = {
         // @ts-ignore-next-line
@@ -121,41 +148,27 @@ export function startContractEventListener() {
 
       const pvpActionMessage = {
         messageType: WsMessageTypes.PVP_ACTION_ENACTED,
+        signature: 'signature',
         sender: address,
-        content: pvpAction,
+        content: {
+          timestamp: Date.now(), //TODO: this is a hack, we need to use the block number
+          roomId: round.id,
+          roundId: round.id,
+          instigator: 57,
+          instigatorAddress: address,
+          txHash: event.transactionHash || 'txHash', //?
+          fee: 0,
+          action: pvpAction,
+        },
       };
 
-      const { data: room, error: roomError } = await supabase
-        .from('rooms')
-        .select('id')
-        .eq('contract_address', contractAddress)
-        .single();
-
-      if (roomError) {
-        console.error('Error fetching room:', roomError);
-        return;
-      }
-
-      const { data: round, error: roundError } = await supabase
-        .from('rounds')
-        .select('id')
-        .eq('room_id', room.id)
-        .eq('status', 'OPEN')
-        .single();
-
-      if (roundError) {
-        if (roundError.code === 'PGRST106') {
-          console.error(`No open round found for room ${room.id}, skipping pvp notification`);
-          return;
-        }
-        console.error('Error fetching round:', roundError);
-        return;
-      }
 
       await wsOps.broadcastToAiChat({
         roomId: room.id,
+
         record: {
           agent_id: 57, //TODO hardcoding so bad, feels so bad, profound sadness, mama GM
+
           message: pvpActionMessage,
           round_id: round.id,
           message_type: WsMessageTypes.PVP_ACTION_ENACTED,
