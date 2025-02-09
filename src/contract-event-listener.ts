@@ -81,6 +81,7 @@ export function startContractEventListener() {
     [getIndexedStringHash('poison')]: 'poison',
   };
 
+  // REMOVE HARDCODED ROOM ID
   contract.on(
     'PvpActionInvoked',
     async (verbHash: any, address: string, endTime: number, parameters: any, event: any) => {
@@ -125,10 +126,21 @@ export function startContractEventListener() {
         content: pvpAction,
       };
 
+      const { data: room, error: roomError } = await supabase
+        .from('rooms')
+        .select('id')
+        .eq('contract_address', contractAddress)
+        .single();
+
+      if (roomError) {
+        console.error('Error fetching room:', roomError);
+        return;
+      }
+
       const { data: round, error: roundError } = await supabase
         .from('rounds')
         .select('id')
-        .eq('room_id', 15)
+        .eq('room_id', room.id)
         .eq('status', 'OPEN')
         .single();
 
@@ -142,7 +154,7 @@ export function startContractEventListener() {
       }
 
       await wsOps.broadcastToAiChat({
-        roomId: 15,
+        roomId: room.id,
         record: {
           agent_id: 57, //TODO hardcoding so bad, feels so bad, profound sadness, mama GM
           message: pvpActionMessage,
