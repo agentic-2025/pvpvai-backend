@@ -66,7 +66,7 @@ export function startContractEventListener() {
   const provider = new ethers.JsonRpcProvider(process.env.BASE_SEPOLIA_RPC_URL);
 
   // Your deployed contract address
-  const contractAddress = '0x9Bd805b04809AeE006Eb05572AAFB2807A03eCDb';
+  const contractAddress = '0x1698f764C1d34315698D9D96Ded939e24587a3fB';
 
   // Create contract instance
   const contract = new ethers.Contract(contractAddress, roomAbi, provider);
@@ -125,16 +125,27 @@ export function startContractEventListener() {
         content: pvpAction,
       };
 
+      const { data: room, error: roomError } = await supabase
+        .from('rooms')
+        .select('id')
+        .eq('contract_address', contractAddress)
+        .single();
+
+      if (roomError) {
+        console.error('Error fetching room:', roomError);
+        return;
+      }
+
       const { data: round, error: roundError } = await supabase
         .from('rounds')
         .select('id')
-        .eq('room_id', 15)
+        .eq('room_id', room.id)
         .eq('status', 'OPEN')
         .single();
 
       if (roundError) {
         if (roundError.code === 'PGRST106') {
-          console.error('No open round found for room 15, skipping pvp notification');
+          console.error(`No open round found for room ${room.id}, skipping pvp notification`);
           return;
         }
         console.error('Error fetching round:', roundError);
@@ -142,7 +153,7 @@ export function startContractEventListener() {
       }
 
       await wsOps.broadcastToAiChat({
-        roomId: 15,
+        roomId: room.id,
         record: {
           agent_id: 57, //TODO hardcoding so bad, feels so bad, profound sadness, mama GM
           message: pvpActionMessage,
