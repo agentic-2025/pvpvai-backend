@@ -11,7 +11,7 @@ import {
   poisonStatusSchema,
   silenceStatusSchema,
 } from './utils/schemas';
-import { wsOps } from './ws/operations';
+import { wsOps } from './config';
 
 import { Database } from './types/database.types';
 console.log('Starting contract event listener');
@@ -132,7 +132,7 @@ export function startContractEventListener() {
         // @ts-ignore-next-line
         actionType: verb.toUpperCase() as PvpActions,
         actionCategory:
-          verb === PvpActions.ATTACK
+          verb.toUpperCase() === PvpActions.ATTACK
             ? PvpActionCategories.DIRECT_ACTION
             : PvpActionCategories.STATUS_EFFECT,
         parameters: decodedParameters,
