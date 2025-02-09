@@ -66,7 +66,7 @@ export function startContractEventListener() {
   const provider = new ethers.JsonRpcProvider(process.env.BASE_SEPOLIA_RPC_URL);
 
   // Your deployed contract address
-  const contractAddress = '0x9Bd805b04809AeE006Eb05572AAFB2807A03eCDb';
+  const contractAddress = '0x1698f764C1d34315698D9D96Ded939e24587a3fB';
 
   // Create contract instance
   const contract = new ethers.Contract(contractAddress, roomAbi, provider);
