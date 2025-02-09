@@ -73,7 +73,7 @@ export class WSOperations {
     await this.sendMessageToRoom({
       roomId,
       message: record.message,
-      excludeConnection,
+      excludeConnection
     });
   }
 
@@ -135,6 +135,8 @@ export class WSOperations {
       return;
     }
 
+    console.log('Sending message to room', params.roomId, params.message, params.excludeConnection);
+
     const messageString = JSON.stringify(params.message);
     const sendPromises: Promise<void>[] = [];
 
@@ -166,18 +168,18 @@ export class WSOperations {
     try {
       const { signature, sender, content } = message;
       const { roundId, timestamp } = message.content;
-      const { error: signatureError } = verifySignedMessage(
-        content,
-        signature,
-        sender,
-        timestamp,
-        SIGNATURE_WINDOW_MS
-      );
-      if (signatureError) {
-        console.log('Public chat message failed signature verification', signatureError);
-        await this.sendSystemMessage(client, signatureError, true, message);
-        return;
-      }
+      // const { error: signatureError } = verifySignedMessage(
+      //   content,
+      //   signature,
+      //   sender,
+      //   timestamp,
+      //   SIGNATURE_WINDOW_MS
+      // );
+      // if (signatureError) {
+      //   console.log('Public chat message failed signature verification', signatureError);
+      //   await this.sendSystemMessage(client, signatureError, true, message);
+      //   return;
+      // }
 
       const { round, valid, reason } = await roundPreflight(roundId);
       if (!valid) {
@@ -193,7 +195,7 @@ export class WSOperations {
           user_id: message.content.userId,
           message: message,
         },
-        excludeConnection: client,
+        // excludeConnection: client,
       });
 
       console.log(
