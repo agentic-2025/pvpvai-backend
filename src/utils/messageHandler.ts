@@ -35,6 +35,7 @@ import {
   observationMessageInputSchema,
 } from './schemas';
 import { roundAndAgentsPreflight } from './validation';
+import { applyPvp } from '../pvp';
 
 // Add address validation helper
 function isValidEthereumAddress(address: string): boolean {
@@ -400,23 +401,65 @@ export async function processAgentMessage(
       };
     }
 
-    const postPvpMessages: Record<number, any> = {};
+    // Get contract address for PvP checks
+    const { data: room } = await supabase
+      .from('rooms')
+      .select('contract_address')
+      .eq('id', roomId)
+      .single();
+
+    if (!room?.contract_address) {
+      return {
+        error: 'Room contract address not found',
+        statusCode: 400,
+      };
+    }
+
+    // Create map of agent IDs to wallet addresses for PvP, filtering out null values
+    const agentAddresses = new Map(
+      agentKeys.data?.filter(agent => agent.wallet_address != null)
+        .map(agent => [agent.agent_id, agent.wallet_address as string]) || []
+    );
+
+    // Apply PvP effects to the message
+    const pvpResult = await applyPvp(
+      message,
+      message.content.agentId,
+      agents.map(a => a.id).filter(id => id !== message.content.agentId),
+      room.contract_address,
+      agentAddresses
+    );
+
+    console.log('PvP result:', pvpResult);
+
+    // If sender is silenced, return early
+    if (Object.keys(pvpResult.targetMessages).length === 0) {
+      return {
+        message: 'Message blocked - sender is silenced',
+        statusCode: 200,
+      };
+    }
+
     const backendSignature = await signMessage(message.content);
-    // Send processed message to all agents in the round
+    const postPvpMessages: Record<number, any> = pvpResult.targetMessages;
+
+    // Send processed messages to agents, with PvP modifications applied
     for (const agent of agents) {
       if (agent.id === message.content.agentId) {
         continue;
       }
-      const postPvpMessage = message;
-      postPvpMessages[agent.id] = postPvpMessage;
-      await sendMessageToAgent({
-        agent,
-        message: {
-          ...message,
-          signature: backendSignature,
-          sender: backendEthersSigningWallet.address,
-        },
-      });
+      
+      const postPvpMessage = postPvpMessages[agent.id];
+      if (postPvpMessage) { // Skip if target is deafened
+        await sendMessageToAgent({
+          agent,
+          message: {
+            ...postPvpMessage,
+            signature: backendSignature,
+            sender: backendEthersSigningWallet.address,
+          },
+        });
+      }
     }
 
     // Broadcast to all players in the room - Fix: Don't stringify an already parsed object
@@ -440,6 +483,7 @@ export async function processAgentMessage(
               .filter((a) => a.id !== message.content.agentId)
               .map((a) => a.id),
             postPvpMessages,
+            // pvpStatusEffects: pvpResult.appliedEffects,
             pvpStatusEffects:
               typeof round.pvp_status_effects === 'string'
                 ? JSON.parse(round.pvp_status_effects)

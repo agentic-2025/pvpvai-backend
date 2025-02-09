@@ -1,7 +1,10 @@
 import { CdpTool } from '@coinbase/cdp-langchain';
 import { z } from 'zod';
-import { createAndSaveWalletToFile, NetworkId } from '../../src/utils/walletUtils';
-
+import { createAndSaveWalletToFile, NetworkId } from '../../utils/walletUtils';
+import { supabase } from '../../config';
+import {
+  CdpAgentkit
+} from '@coinbase/cdp-agentkit-core';
 // Define the prompt for the wallet creation action
 const CREATE_WALLET_PROMPT = `
 This tool creates a new wallet on a specified network using the Coinbase SDK.
@@ -84,7 +87,7 @@ async function createWallet(args: z.infer<typeof CreateWalletInput>): Promise<st
   }
 }
 
-const createWalletTool = (agentkit: AgentKit) => {
+const createWalletTool = (agentkit: CdpAgentkit) => {
   return new CdpTool(
     {
       name: 'create_wallet',
