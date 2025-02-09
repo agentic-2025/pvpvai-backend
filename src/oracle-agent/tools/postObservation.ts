@@ -2,6 +2,7 @@ import { customActionProvider, EvmWalletProvider } from '@coinbase/agentkit';
 import { hashMessage } from '@coinbase/coinbase-sdk';
 import axios from 'axios';
 import { z } from 'zod';
+import { observationMessageContentSchema } from '../../utils/schemas';
 
 // Define the prompt for the post observation action
 const POST_OBSERVATION_PROMPT = `
@@ -50,7 +51,7 @@ const PriceUpdateContent = z.object({
 });
 
 // Define the input schema using Zod
-const PostObservationInput = z.object({}).passthrough();
+// const PostObservationInput = z.object({}).passthrough();
 // const PostObservationInput = z
 //   .object({
 //     account: z.string(),
@@ -63,28 +64,36 @@ const PostObservationInput = z.object({}).passthrough();
 const postObservationProvider = customActionProvider<EvmWalletProvider>({
   name: 'post_observation',
   description: POST_OBSERVATION_PROMPT,
-  schema: PostObservationInput,
+  schema: observationMessageContentSchema,
   invoke: async (wallet, args: any): Promise<string> => {
     try {
+      const timestamp = Date.now();
+      // Ensure args has the correct structure for observations
+      const content = {
+        timestamp,
+        roomId: args.roomId,
+        roundId: args.roundId,
+        agentId: args.agentId,
+        observationType: args.observationType,
+        data: args.data,
+      };
+
       // Create signature of the observation data
-      const observationString = JSON.stringify(args);
+      const observationString = JSON.stringify(content);
       const signature = await wallet.signMessage(hashMessage(observationString));
 
-      // Post to the observations endpoint
+      // Post to the observations endpoint with the correct message structure
       const response = await axios.post(
-        `${process.env.BACKEND_URL || 'http://localhost:3000'}/rooms/observations`,
+        `${process.env.BACKEND_URL || 'http://localhost:3000'}/messages/observations`,
         {
-          ...args,
-          content: {
-            ...args.content,
-            timestamp: Date.now(),
-          },
-          timestamp: Date.now(),
+          messageType: 'observation',
+          sender: await wallet.getAddress(),
+          signature,
+          content,
         },
         {
           headers: {
             'Content-Type': 'application/json',
-            'X-Authorization-Signature': signature.toString(),
           },
         }
       );
@@ -99,6 +108,7 @@ const postObservationProvider = customActionProvider<EvmWalletProvider>({
         2
       );
     } catch (error) {
+      console.error('Failed to post observation:', error);
       if (error instanceof Error) {
         throw new Error(`Failed to post observation: ${error.message}`);
       }

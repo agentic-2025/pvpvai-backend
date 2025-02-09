@@ -77,6 +77,7 @@ server.register(async function (fastify) {
 
         switch (data.messageType) {
           case WsMessageTypes.SUBSCRIBE_ROOM:
+            console.log('Handling subscribe room:', JSON.parse(message.toString()));
             wsOps.handleSubscribeRoom(client, data);
             break;
 
