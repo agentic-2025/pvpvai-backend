@@ -9,6 +9,7 @@ import { processGmMessage } from './utils/messageHandler';
 import { gmMessageAiChatOutputSchema, gmMessageInputSchema } from './utils/schemas';
 import { sortObjectKeys } from './utils/sortObjectKeys';
 import { RoundState } from './rooms';
+import { wsServer } from './ws/server';
 
 const HARDCODED_GM_ID = 57;
 export async function syncAgentsWithActiveRounds() {
@@ -251,7 +252,7 @@ async function sendGmMessage({
   targets: number[];
   message: string;
 }) {
-  await wsOps.sendMessageToRoom({
+  await wsServer.sendMessageToRoom({
     roomId,
     message: {
       messageType: WsMessageTypes.GM_MESSAGE,

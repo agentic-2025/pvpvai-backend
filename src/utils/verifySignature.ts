@@ -21,13 +21,6 @@ import { sortObjectKeys } from './sortObjectKeys';
  * 4. Sign/verify the resulting string
  */
 
-export interface MessageContent {
-  timestamp: number;
-  roomId: string;
-  roundId: string;
-  agentId: string;
-  text: string;
-}
 
 interface VerificationResult {
   signer: string;
@@ -35,11 +28,12 @@ interface VerificationResult {
 }
 
 export const signMessage = async (
-  content: MessageContent,
+  content: object, 
   privateKey: string
 ): Promise<string> => {
   try {
-    // Use deterministic stringification
+    // Use determincccccblefrehlgtdiikknkitbeuddndcehrducrlnlhf
+    // istic stringification
     const messageString = JSON.stringify(sortObjectKeys(content));
     const wallet = new Wallet(privateKey);
     return await wallet.signMessage(messageString);
@@ -49,7 +43,7 @@ export const signMessage = async (
 };
 
 export const verifySignedMessage = (
-  content: MessageContent,
+  content: object,
   signature: string,
   sender: string,
   timestamp: number,
@@ -57,18 +51,20 @@ export const verifySignedMessage = (
 ): VerificationResult => {
   // Check that message is recent
   const now = Date.now();
-  
+
   if (timestamp > now) {
     return {
       signer: sender,
-      error: 'Timestamp is in the future. Ensure your timestamp is in millisecond precision and is in UTC.'
+      error:
+        'Timestamp is in the future. Ensure your timestamp is in millisecond precision and is in UTC.',
     };
   }
 
   if (now - timestamp > signatureWindowMs) {
     return {
       signer: sender,
-      error: 'Signature expired. Please ensure your timestamp has millisecond precision, is in UTC, and is within the signature window.'
+      error:
+        'Signature expired. Please ensure your timestamp has millisecond precision, is in UTC, and is within the signature window.',
     };
   }
 
@@ -79,12 +75,12 @@ export const verifySignedMessage = (
       roomId: content.roomId,
       roundId: content.roundId,
       agentId: content.agentId,
-      text: content.text
+      text: content.text,
     };
 
     // Use deterministic stringification on the same fields as client
     const messageString = JSON.stringify(sortObjectKeys(signedContent));
-    
+
     // Log for debugging
     console.log('Verifying content:', signedContent);
     console.log('Message string:', messageString);
@@ -96,17 +92,17 @@ export const verifySignedMessage = (
     if (recoveredAddress.toLowerCase() !== sender.toLowerCase()) {
       return {
         signer: recoveredAddress,
-        error: `Signature verification failed, expected sender address: ${sender} but recovered address: ${recoveredAddress}. Message string: ${messageString}`
+        error: `Signature verification failed, expected sender address: ${sender} but recovered address: ${recoveredAddress}. Message string: ${messageString}`,
       };
     }
 
     return {
-      signer: recoveredAddress
+      signer: recoveredAddress,
     };
   } catch (error) {
     return {
       signer: sender,
-      error: `Signature verification error: ${error instanceof Error ? error.message : 'Unknown error'}`
+      error: `Signature verification error: ${error instanceof Error ? error.message : 'Unknown error'}`,
     };
   }
 };

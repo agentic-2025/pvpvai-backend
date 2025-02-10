@@ -3,9 +3,11 @@ import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { contractClient, supabase } from '../config';
 import { roomController } from '../controllers/roomController';
-import { roundController } from '../controllers/roundController';
 import { agentAddSchema, agentBulkAddSchema, roomSetupSchema } from '../utils/schemas';
 import { chainIdToNetwork, createAndSaveWalletToFile } from '../utils/walletUtils';
+
+
+
 
 export async function roomRoutes(server: FastifyInstance) {
   // Setup new room
@@ -169,14 +171,14 @@ export async function roomRoutes(server: FastifyInstance) {
     async (request, reply) => {
       const roomId = parseInt(request.params.roomId);
       const result = await roomController.findRoomById(roomId);
-      
+
       if (!result.success) {
         return reply.status(404).send({ error: result.error });
       }
-      
+
       return reply.send({
         success: true,
-        data: result.data
+        data: result.data,
       });
     }
   );
@@ -219,12 +221,12 @@ export async function roomRoutes(server: FastifyInstance) {
 
         return reply.send({
           success: true,
-          data: rounds
+          data: rounds,
         });
       } catch (error) {
         console.error('Error fetching rounds:', error);
-        return reply.status(500).send({ 
-          error: 'Failed to fetch rounds' 
+        return reply.status(500).send({
+          error: 'Failed to fetch rounds',
         });
       }
     }

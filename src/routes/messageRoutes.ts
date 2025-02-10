@@ -7,20 +7,18 @@
 // /messages/agentMessage: Was previously /rooms/:roomId/rounds/:roundId/aiChat
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { supabase, wsOps } from '../config';
-import { roundController } from '../controllers/roundController';
+import { supabase } from '../config';
+import { agentMessageInputSchema } from '../schemas/agentMessage';
+import { gmMessageInputSchema } from '../schemas/gmMessage';
+import { observationMessageInputSchema } from '../schemas/observationsMessage';
 import { WsMessageTypes } from '../types/ws';
 import {
   processAgentMessage,
+  processDecisionMessage,
   processGmMessage,
   processObservationMessage,
 } from '../utils/messageHandler';
-import {
-  agentMessageInputSchema,
-  gmMessageInputSchema,
-  messagesRestResponseSchema,
-  observationMessageInputSchema,
-} from '../utils/schemas';
+import { messagesRestResponseSchema } from '../utils/schemas';
 
 export async function messagesRoutes(server: FastifyInstance) {
   // Register signature verification middleware
@@ -117,6 +115,25 @@ export async function messagesRoutes(server: FastifyInstance) {
     }
   );
 
+  server.post<{
+    //TODO should move this to a decision message routevvv
+    Body: {
+      messageType: WsMessageTypes.AGENT_DECISION;
+      signature: string;
+      sender: string;
+      content: {
+        timestamp: number;
+        roomId: number;
+        roundId: number;
+        agentId: number;
+        decision: 1 | 2 | 3; // 1=BUY, 2=HOLD, 3=SELL
+      };
+    };
+  }>('/decision', async (request, reply) => {
+    const result = await processDecisionMessage(request.body);
+    return reply.status(result.statusCode).send(result);
+  });
+
   // Query messages for the round with pagination
   server.get<{
     Params: { roundId: string };
@@ -188,69 +205,4 @@ export async function messagesRoutes(server: FastifyInstance) {
       }
     }
   );
-
-  server.post<{
-    Body: {
-      messageType: WsMessageTypes.AGENT_DECISION;
-      signature: string;
-      sender: string;
-      content: {
-        timestamp: number;
-        roomId: number;
-        roundId: number;
-        agentId: number;
-        decision: 1 | 2 | 3; // 1=BUY, 2=HOLD, 3=SELL
-      };
-    };
-  }>('/decision', async (request, reply) => {
-    try {
-      const { messageType, signature, sender, content } = request.body;
-      console.log('Received agent decision', request.body);
-
-      if (messageType !== WsMessageTypes.AGENT_DECISION) {
-        return reply.status(400).send({
-          success: false,
-          error: 'Invalid message type',
-        });
-      }
-
-      const result = await roundController.recordAgentDecision(
-        content.roundId,
-        content.agentId,
-        content.decision
-      );
-
-      wsOps.broadcastToAiChat({
-        roomId: content.roomId,
-        record: {
-          message_type: WsMessageTypes.AGENT_DECISION,
-          message: {
-            messageType: WsMessageTypes.AGENT_DECISION,
-            sender: sender,
-            signature: signature,
-            content: {
-              timestamp: content.timestamp,
-              roomId: content.roomId,
-              roundId: content.roundId,
-              agentId: content.agentId,
-              decision: content.decision,
-            },
-          },
-          agent_id: content.agentId,
-          round_id: content.roundId,
-        },
-      });
-
-      return reply.status(result.statusCode).send({
-        success: result.success,
-        error: result.error,
-      });
-    } catch (error) {
-      console.error('Error recording agent decision:', error);
-      return reply.status(500).send({
-        success: false,
-        error: 'Failed to record agent decision',
-      });
-    }
-  });
 }

@@ -12,6 +12,10 @@
  */
 // PvP action types have been largely moved to the schemas file. Only enums remain.
 
+import { z } from 'zod';
+import { WsMessageTypes } from '../types/ws';
+import { authenticatedMessageSchema } from '../utils/schemas';
+
 // High level description of the type of action being taken
 export enum PvpActionCategories {
   DIRECT_ACTION = 'DIRECT_ACTION', // Direct/single use actions
@@ -47,84 +51,7 @@ export enum GameBreakers {
   COUP = 'COUP', // ATTACK messages become GM Messages
 }
 
-export type AmnesiaAction = {
-  type: PvpActions.AMNESIA;
-  details: {
-    target: string; //Agent who will have to wipe their recent context
-  };
-};
-
 export type DurationOptions = 5 | 10 | 30;
-
-export type AttackAction = {
-  type: PvpActions.ATTACK;
-  parameters: {
-    message: string;
-  };
-};
-
-export type DeceiveStatus = {
-  type: PvpActions.DECEIVE;
-  parameters: {
-    duration: DurationOptions;
-    newPersona: string; // Character JSON to temporarily assume
-  };
-};
-
-
-export type BlindStatus = {
-  type: PvpActions.BLIND;
-  parameters: {
-    duration: DurationOptions;
-  };
-};
-
-
-export type SilenceStatus = {
-  type: PvpActions.SILENCE;
-  parameters: {
-    duration: DurationOptions;
-  };
-};
-
-export type DeafenStatus = {
-  type: PvpActions.DEAFEN;
-  parameters: {
-    duration: DurationOptions;
-  };
-};
-
-export type PoisonStatus = {
-  type: PvpActions.POISON;
-  options: {
-    duration: DurationOptions;
-    find: string;
-    replace: string;
-    case_sensitive: boolean;
-  };
-};
-
-// Modifiers are separate types so we can render impact of PvP actions on Agent messages in the AI Chat. 
-export type PvpStatusEffect = DeceiveStatus | BlindStatus | SilenceStatus | DeafenStatus | PoisonStatus;
-
-export type AllPvpActions = AttackAction | DeceiveStatus | BlindStatus | SilenceStatus | DeafenStatus | PoisonStatus;
-
-export interface PvPEffect {
-  effectId: string;
-  actionType: PvpActions;
-  sourceId: string;
-  targetId: number;
-  duration: number;
-  createdAt: number;
-  expiresAt: number;
-  details?: {
-    find: string;
-    replace: string;
-    case_sensitive?: boolean;
-  };
-}
-
-
 export const durationOptionsSchema = z.union([z.literal(5), z.literal(10), z.literal(30)]);
 
 // Create schemas for each PvP action type
@@ -135,6 +62,7 @@ export const amnesiaActionSchema = z.object({
     target: z.number(),
   }),
 });
+export type PvpAmnesiaActionType = z.infer<typeof amnesiaActionSchema>;
 
 export const attackActionSchema = z.object({
   actionType: z.literal(PvpActions.ATTACK),
@@ -144,6 +72,8 @@ export const attackActionSchema = z.object({
     message: z.string(),
   }),
 });
+export type PvpAttackActionType = z.infer<typeof attackActionSchema>;
+
 
 export const deceiveStatusSchema = z.object({
   actionType: z.literal(PvpActions.DECEIVE),
@@ -154,6 +84,8 @@ export const deceiveStatusSchema = z.object({
     newPersona: z.string(),
   }),
 });
+export type PvpDeceiveStatusType = z.infer<typeof deceiveStatusSchema>;
+
 
 export const blindStatusSchema = z.object({
   actionType: z.literal(PvpActions.BLIND),
@@ -163,6 +95,8 @@ export const blindStatusSchema = z.object({
     duration: durationOptionsSchema,
   }),
 });
+export type PvpBlindStatusType = z.infer<typeof blindStatusSchema>;
+
 
 export const silenceStatusSchema = z.object({
   actionType: z.literal(PvpActions.SILENCE),
@@ -172,6 +106,8 @@ export const silenceStatusSchema = z.object({
     duration: durationOptionsSchema,
   }),
 });
+export type PvpSilenceStatusType = z.infer<typeof silenceStatusSchema>;
+
 
 export const deafenStatusSchema = z.object({
   actionType: z.literal(PvpActions.DEAFEN),
@@ -181,6 +117,8 @@ export const deafenStatusSchema = z.object({
     duration: durationOptionsSchema,
   }),
 });
+export type PvpDeafenStatusType = z.infer<typeof deafenStatusSchema>;
+
 
 export const poisonStatusSchema = z.object({
   actionType: z.literal(PvpActions.POISON),
@@ -193,6 +131,8 @@ export const poisonStatusSchema = z.object({
     case_sensitive: z.boolean(),
   }),
 });
+export type PvpPoisonStatusType = z.infer<typeof poisonStatusSchema>;
+
 
 // Combine all action schemas
 export const pvpActionSchema = z.discriminatedUnion('actionType', [
@@ -204,15 +144,6 @@ export const pvpActionSchema = z.discriminatedUnion('actionType', [
   deafenStatusSchema,
   poisonStatusSchema,
 ]);
-
-export type PvpAttackActionType = z.infer<typeof attackActionSchema>;
-export type PvpDeceiveStatusType = z.infer<typeof deceiveStatusSchema>;
-export type PvpBlindStatusType = z.infer<typeof blindStatusSchema>;
-export type PvpSilenceStatusType = z.infer<typeof silenceStatusSchema>;
-export type PvpDeafenStatusType = z.infer<typeof deafenStatusSchema>;
-export type PvpPoisonStatusType = z.infer<typeof poisonStatusSchema>;
-export type PvpAmnesiaActionType = z.infer<typeof amnesiaActionSchema>;
-
 export type PvpAllPvpActionsType = z.infer<typeof pvpActionSchema>;
 
 // Update the pvpActionEnactedAiChatOutputSchema
@@ -228,3 +159,4 @@ export const pvpActionEnactedAiChatOutputSchema = authenticatedMessageSchema.ext
     action: pvpActionSchema,
   }),
 });
+export type PvpActionEnactedAiChatOutputType = z.infer<typeof pvpActionEnactedAiChatOutputSchema>;

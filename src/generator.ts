@@ -4,18 +4,20 @@ import { ethers, Wallet } from 'ethers';
 import { WebSocket } from 'ws';
 import { z } from 'zod';
 import { backendEthersSigningWallet } from './config';
+import { agentMessageInputSchema } from './schemas/agentMessage';
+import {
+  participantsInputMessageSchema,
+  subscribeRoomInputMessageSchema,
+} from './schemas/wsServer';
 import { roomAbi } from './types/contract.types';
 import { Database } from './types/database.types';
 import { WsMessageTypes } from './types/ws';
 import { signPayload } from './utils/auth';
 import {
-  agentMessageInputSchema,
   gmMessageInputSchema,
   observationMessageInputSchema,
   ObservationType,
-  participantsInputMessageSchema,
   publicChatMessageInputSchema,
-  subscribeRoomInputMessageSchema,
 } from './utils/schemas';
 import { sortObjectKeys } from './utils/sortObjectKeys';
 

@@ -2,8 +2,8 @@ import cors from '@fastify/cors';
 import websocket from '@fastify/websocket';
 import { CronJob } from 'cron';
 import fastify from 'fastify';
-import { checkAndCloseRounds, checkAndCreateRounds, syncAgentsWithActiveRounds } from './bg-sync';
-import { supabase, wsOps } from './config';
+import { checkAndCloseRounds, checkAndCreateRounds } from './bg-sync';
+import { supabase } from './config';
 import { startContractEventListener } from './contract-event-listener';
 import { roundController } from './controllers/roundController';
 import { signatureVerificationPlugin } from './middleware/signatureVerification';
@@ -12,8 +12,7 @@ import roomsRoutes from './rooms';
 import { agentRoutes } from './routes/agentRoutes';
 import { messagesRoutes } from './routes/messageRoutes';
 import { roundRoutes } from './routes/roundRoutes';
-import { WsMessageTypes } from './types/ws';
-import { AllInputSchemaTypes } from './utils/schemas';
+import { setupWebSocketServer } from './ws/server';
 // Add type declaration for the custom property
 declare module 'fastify' {
   interface FastifyRequest {
@@ -63,64 +62,7 @@ server.register(async function (fastify) {
 });
 
 // Register WebSocket handler
-server.register(async function (fastify) {
-  fastify.get('/ws', { websocket: true }, (connection, req) => {
-    const client = connection;
-
-    // Set up heartbeat check for this client
-    const heartbeatInterval = wsOps.setupHeartbeat(client);
-
-    client.on('message', async (message: Buffer) => {
-      try {
-        const data: AllInputSchemaTypes = JSON.parse(message.toString());
-        console.log(`Received ${data.messageType} message...`);
-
-        switch (data.messageType) {
-          case WsMessageTypes.SUBSCRIBE_ROOM:
-            console.log('Handling subscribe room:', JSON.parse(message.toString()));
-            wsOps.handleSubscribeRoom(client, data);
-            break;
-
-          case WsMessageTypes.PARTICIPANTS:
-            wsOps.handleParticipants(client, data);
-            break;
-
-          case WsMessageTypes.PUBLIC_CHAT:
-            await wsOps.handlePublicChat(client, data);
-            break;
-
-          case WsMessageTypes.HEARTBEAT:
-            wsOps.handleHeartbeat(client);
-            break;
-
-          case WsMessageTypes.GM_MESSAGE:
-            console.log('Handling GM message:', data);
-            await wsOps.handleGmMessage(client, data);
-            break;
-
-          default:
-            wsOps.sendSystemMessage(
-              client,
-              'Invalid message type ' +
-                data.messageType +
-                ', please pass a supported message type:' +
-                Object.values(WsMessageTypes).join(', '),
-              true,
-              data
-            );
-        }
-      } catch (err) {
-        wsOps.sendSystemMessage(client, 'Hit error handling message: ' + err, true, message);
-      }
-    });
-
-    // Clean up on client disconnect
-    client.on('close', () => {
-      wsOps.cleanup(client);
-      clearInterval(heartbeatInterval);
-    });
-  });
-});
+(async () => await setupWebSocketServer(server))();
 
 const start = async () => {
   try {

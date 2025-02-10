@@ -21,20 +21,20 @@
 import axios, { AxiosError } from 'axios';
 import { z } from 'zod';
 import { backendEthersSigningWallet, supabase, wsOps } from '../config';
+import { roundController } from '../controllers/roundController';
 import { applyPvp } from '../pvp';
+import { agentMessageInputSchema } from '../schemas/agentMessage';
+import { gmMessageAiChatOutputSchema, gmMessageInputSchema } from '../schemas/gmMessage';
+import {
+  observationMessageAiChatOutputSchema,
+  observationMessageInputSchema,
+} from '../schemas/observationsMessage';
 import { roomService } from '../services/roomService';
 import { roundService } from '../services/roundService';
 import { Tables } from '../types/database.types';
 import { WsMessageTypes } from '../types/ws';
 import { signMessage } from './auth';
-import {
-  agentMessageInputSchema,
-  AllAgentChatMessageSchemaTypes,
-  gmMessageAiChatOutputSchema,
-  gmMessageInputSchema,
-  observationMessageAiChatOutputSchema,
-  observationMessageInputSchema,
-} from './schemas';
+import { AllAgentChatMessageSchemaTypes } from './schemas';
 import { roundAndAgentsPreflight } from './validation';
 
 // Add address validation helper
@@ -49,6 +49,15 @@ const SYSTEM_GM_ID = 51; // System GM identifier // TODO make configurable
 const DECISION_REQUEST_TIMEOUT = 30000; // 30 seconds until retry
 const MAX_DECISION_RETRIES = 3; // Maximum number of retries for decision requests
 const DECISION_CHECK_INTERVAL = 10000; // Check every 10 seconds
+
+// Add this type definition near the top of the file with other types
+type ProcessMessageResponse = {
+  message?: string;
+  data?: any;
+  error?: string;
+  statusCode: number;
+  success?: boolean;
+};
 
 /**
  * NEW: Main function to check inactive agents in a round
@@ -191,138 +200,6 @@ async function notifyInactiveAgent(
     console.error('Error notifying inactive agent:', error);
   }
 }
-
-/**
- * NEW: Request end-of-round trading decisions from agent
- */
-export async function requestAgentDecision(roundId: number, agentId: number): Promise<void> {
-  try {
-    // Get round with all needed fields
-    const { data: round } = await supabase
-      .from('rounds')
-      .select('status, room_id') // Added room_id to selection
-      .eq('id', roundId)
-      .single();
-
-    if (round?.status !== 'CLOSING') {
-      console.log('Not requesting decision - round not in closing phase');
-      return;
-    }
-
-    // Check if agent already made a decision
-    const { data: agentData } = await supabase
-      .from('round_agents')
-      .select('outcome')
-      .eq('round_id', roundId)
-      .eq('agent_id', agentId)
-      .single();
-
-    // Type check the outcome data
-    const outcome = agentData?.outcome as { decision?: number } | null;
-    if (outcome?.decision) {
-      return; // Decision already recorded
-    }
-
-    const content = {
-      gmId: SYSTEM_GM_ID,
-      timestamp: Date.now(),
-      targets: [agentId] as number[], // Fix: Use mutable array type
-      roomId: round.room_id, // Now guaranteed to exist
-      roundId,
-      message: 'Please make your trading decision (BUY/HOLD/SELL)',
-      deadline: Date.now() + DECISION_REQUEST_TIMEOUT,
-      ignoreErrors: false,
-      additionalData: {
-        requestType: 'TRADING_DECISION',
-        attempt: 1,
-      },
-    };
-
-    const signature = await signMessage(content);
-    const gmMessage: z.infer<typeof gmMessageInputSchema> = {
-      messageType: WsMessageTypes.GM_MESSAGE,
-      signature,
-      sender: backendEthersSigningWallet.address,
-      content,
-    };
-
-    await processGmMessage(gmMessage);
-    await scheduleDecisionCheck(roundId, agentId, 1);
-  } catch (error) {
-    console.error('Error requesting agent decision:', error);
-  }
-}
-
-/**
- * NEW: Check if agent has made a decision and retry if needed
- */
-async function scheduleDecisionCheck(
-  roundId: number,
-  agentId: number,
-  attempt: number
-): Promise<void> {
-  setTimeout(async () => {
-    try {
-      // Get room first to ensure we have roomId
-      const room = await getAgentRoom(roundId);
-      if (!room?.room_id) return;
-
-      const { data: agentData } = await supabase
-        .from('round_agents')
-        .select('outcome')
-        .eq('round_id', roundId)
-        .eq('agent_id', agentId)
-        .single();
-
-      // Type check the outcome data
-      const outcome = agentData?.outcome as { decision?: number } | null;
-      if (!outcome?.decision && attempt < MAX_DECISION_RETRIES) {
-        const content = {
-          gmId: SYSTEM_GM_ID,
-          timestamp: Date.now(),
-          targets: [agentId] as number[], // Fix: Use mutable array type
-          roomId: room.room_id, // Now guaranteed to exist
-          roundId,
-          message: `REMINDER (${attempt + 1}/${MAX_DECISION_RETRIES}): Please make your trading decision (BUY/HOLD/SELL)`,
-          deadline: Date.now() + DECISION_REQUEST_TIMEOUT,
-          ignoreErrors: false,
-          additionalData: {
-            requestType: 'TRADING_DECISION',
-            attempt: attempt + 1,
-          },
-        } as const;
-
-        const signature = await signMessage(content);
-        const gmMessage: z.infer<typeof gmMessageInputSchema> = {
-          messageType: WsMessageTypes.GM_MESSAGE,
-          signature,
-          sender: backendEthersSigningWallet.address,
-          content,
-        };
-
-        await processGmMessage(gmMessage);
-        await scheduleDecisionCheck(roundId, agentId, attempt + 1);
-      }
-    } catch (error) {
-      console.error('Error checking agent decision:', error);
-    }
-  }, DECISION_CHECK_INTERVAL);
-}
-
-/**
- * NEW: Helper to get room info for an agent in a round
- */
-async function getAgentRoom(roundId: number) {
-  const { data } = await supabase.from('rounds').select('room_id').eq('id', roundId).single();
-  return data;
-}
-
-type ProcessMessageResponse = {
-  message?: string;
-  data?: any;
-  error?: string;
-  statusCode: number;
-};
 
 // Messages from an agent participating in the room to another agent
 export async function processAgentMessage(
@@ -860,6 +737,65 @@ export async function sendMessageToAgent(params: {
     console.error('Error sending message to agent:', error);
     return {
       error: error instanceof Error ? error.message : 'Unknown error sending message to agent',
+      statusCode: 500,
+    };
+  }
+}
+
+export async function processDecisionMessage(message: {
+  messageType: WsMessageTypes.AGENT_DECISION;
+  signature: string;
+  sender: string;
+  content: {
+    timestamp: number;
+    roomId: number;
+    roundId: number;
+    agentId: number;
+    decision: 1 | 2 | 3; // 1=BUY, 2=HOLD, 3=SELL
+  };
+}): Promise<ProcessMessageResponse> {
+  try {
+    const { signature, sender, content } = message;
+    console.log('Received agent decision', message);
+
+    const result = await roundController.recordAgentDecision(
+      content.roundId,
+      content.agentId,
+      content.decision
+    );
+
+    wsOps.broadcastToAiChat({
+      roomId: content.roomId,
+      record: {
+        message_type: WsMessageTypes.AGENT_DECISION,
+        message: {
+          messageType: WsMessageTypes.AGENT_DECISION,
+          sender: sender,
+          signature: signature,
+          content: {
+            timestamp: content.timestamp,
+            roomId: content.roomId,
+            roundId: content.roundId,
+            agentId: content.agentId,
+            decision: content.decision,
+          },
+        },
+        agent_id: content.agentId,
+        round_id: content.roundId,
+      },
+    });
+
+    return {
+      message: 'Decision recorded successfully',
+      success: result.success,
+      error: result.error,
+      statusCode: result.statusCode,
+    };
+  } catch (error) {
+    console.error('Error recording agent decision:', error);
+    return {
+      success: false,
+      error: 'Failed to record agent decision',
       statusCode: 500,
     };
   }
