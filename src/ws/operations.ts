@@ -77,7 +77,7 @@ export class WSOperations {
     });
   }
 
-  // Inserts message into round_agent_messages and broadcasts to all agents in the room
+  // Inserts message into round_agent_messages and broadcasts to all users in the room
   async broadcastToAiChat(params: {
     roomId: number;
     record: Database['public']['Tables']['round_agent_messages']['Insert'];
@@ -192,7 +192,7 @@ export class WSOperations {
         roomId: round.room_id,
         record: {
           round_id: roundId,
-          user_id: message.content.userId,
+          // user_id: message.content.userId,
           message: message,
         },
         // excludeConnection: client,
@@ -235,7 +235,7 @@ export class WSOperations {
     }
   }
 
-  // Update subscribe room handler
+  // User sends this message to start receiving notifications for a room.
   async handleSubscribeRoom(
     client: WebSocket,
     message: z.infer<typeof subscribeRoomInputMessageSchema>
@@ -337,6 +337,7 @@ export class WSOperations {
     }
   }
 
+  // Sent by client O keep connection alive, when received eliminates their
   handleHeartbeat(client: WebSocket): void {
     const timeout = this.clientHeartbeats.get(client);
     if (timeout) clearTimeout(timeout);

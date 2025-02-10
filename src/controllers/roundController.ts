@@ -1,24 +1,23 @@
 /**
  * RoundController handles PvP effects and round state management
- * 
+ *
  * Communication channels:
  * - WebSocket: Real-time updates for room participants
  * - REST: Alternative API for agents and external services
- * 
+ *
  * Key features:
  * - PvP effect application and removal
  * - In-memory effect tracking
  * - Round state management
  * - Message broadcasting via WS/REST
  */
-import { roundService } from '../services/roundService';
-import { RoomOperationResult } from '../types/roomTypes';
-import { RoundDataDB } from '../types/roundTypes';
 import { supabase } from '../config';
+import { roundService } from '../services/roundService';
 import { Database } from '../types/database.types';
 import { PvpActions, PvPEffect } from '../types/pvp';
-import { wsOps } from '../ws/operations';
+import { RoomOperationResult } from '../types/roomTypes';
 import { processInactiveAgents } from '../utils/messageHandler';
+import { wsOps } from '../ws/operations';
 
 // Define message types
 interface WsMessage {
@@ -40,51 +39,22 @@ export class RoundController {
   private activePvPEffects: Map<number, PvPEffect[]> = new Map();
 
   private readonly INACTIVITY_THRESHOLD = 300000; // 5 minutes in milliseconds
-  private readonly SYSTEM_GM_ID = 51; // System GM identifier 
+  private readonly SYSTEM_GM_ID = 51; // System GM identifier
 
   // the body of processAgentMessage was moved to roundController.ts since, currently, agent messages only come in over REST
   // can move that functionality back to a common method later when/if we support agent sending message over WS
-
-
 
   async kickParticipant(roundId: number, agentId: number): Promise<RoomOperationResult<void>> {
     return await roundService.kickParticipant(roundId, agentId);
   }
 
-  // Create a new round in a room
-  async createRound(roomId: number, data: { game_master_id?: number; round_config?: any }) {
-    try {
-      const roundData: Database['public']['Tables']['rounds']['Insert'] = {
-        room_id: roomId,
-        active: true,
-        game_master_id: data.game_master_id || null,
-        round_config: data.round_config || null,
-      };
-
-      const { data: round, error } = await supabase
-        .from('rounds')
-        .insert(roundData)
-        .select()
-        .single();
-
-      if (error) {
-        console.error('Error creating round:', error);
-        return { success: false, error: error.message };
-      }
-
-      return { success: true, data: round };
-    } catch (error) {
-      console.error('Error in createRound:', error);
-      return { success: false, error: 'Failed to create round' };
-    }
-  }
 
   /**
    * Applies a new PvP effect to a round
    * Stores effect in memory and broadcasts to room
    */
   public async applyPvPAction(
-    roundId: number, 
+    roundId: number,
     action: {
       actionType: PvpActions;
       sourceId: string;
@@ -101,9 +71,12 @@ export class RoundController {
     try {
       const { data: round, error } = await this.getRound(roundId);
       if (error || !round?.active) {
-        return { 
-          success: false, 
-          error: typeof error === 'object' && error !== null ? (error as Error).message : (error as string) || 'Round not found or inactive' 
+        return {
+          success: false,
+          error:
+            typeof error === 'object' && error !== null
+              ? (error as Error).message
+              : (error as string) || 'Round not found or inactive',
         };
       }
 
@@ -111,7 +84,7 @@ export class RoundController {
         ...action,
         effectId: crypto.randomUUID(),
         createdAt: Date.now(),
-        expiresAt: Date.now() + action.duration
+        expiresAt: Date.now() + action.duration,
       };
 
       const targetEffects = this.activePvPEffects.get(roundId) || [];
@@ -121,17 +94,17 @@ export class RoundController {
       if (useWebSocket) {
         const wsMessage: WsMessage = {
           type: 'pvp_effect_applied',
-          effect
+          effect,
         };
         await wsOps.sendMessageToRoom({
           roomId: round.room_id,
-          message: wsMessage
+          message: wsMessage,
         });
       } else {
         // REST response handled by route handler
-        return { 
-          success: true, 
-          data: effect
+        return {
+          success: true,
+          data: effect,
         };
       }
 
@@ -145,19 +118,22 @@ export class RoundController {
   /**
    * Gets current round state including message history and active effects
    */
-  public async getRoundState(
-    roundId: number
-  ): Promise<RoomOperationResult<{
-    messageHistory: any[];
-    activePvPEffects: PvPEffect[];
-    phase: string;
-  }>> {
+  public async getRoundState(roundId: number): Promise<
+    RoomOperationResult<{
+      messageHistory: any[];
+      activePvPEffects: PvPEffect[];
+      phase: string;
+    }>
+  > {
     try {
       const { data: round, error } = await this.getRound(roundId);
       if (error || !round) {
-        return { 
-          success: false, 
-          error: typeof error === 'object' && error !== null ? (error as Error).message : (error as string) || 'Round not found' 
+        return {
+          success: false,
+          error:
+            typeof error === 'object' && error !== null
+              ? (error as Error).message
+              : (error as string) || 'Round not found',
         };
       }
 
@@ -176,8 +152,8 @@ export class RoundController {
         data: {
           messageHistory: messages || [],
           activePvPEffects: activeEffects,
-          phase: 'discussion' // Could be dynamic in future
-        }
+          phase: 'discussion', // Could be dynamic in future
+        },
       };
     } catch (error) {
       console.error('Error getting round state:', error);
@@ -188,13 +164,15 @@ export class RoundController {
   /**
    * Gets current round state including message history, active effects, and agent details
    */
-  async getRoundStateWithAgents(roundId: number): Promise<RoomOperationResult<{
-    round: any;
-    agents: any[];
-    messageHistory: any[];
-    activePvPEffects: PvPEffect[];
-    phase: string;
-  }>> {
+  async getRoundStateWithAgents(roundId: number): Promise<
+    RoomOperationResult<{
+      round: any;
+      agents: any[];
+      messageHistory: any[];
+      activePvPEffects: PvPEffect[];
+      phase: string;
+    }>
+  > {
     try {
       // Check if round exists first
       const { data: roundExists, error: roundCheckError } = await supabase
@@ -205,7 +183,7 @@ export class RoundController {
       if (roundCheckError || !roundExists?.length) {
         return {
           success: false,
-          error: 'Round not found'
+          error: 'Round not found',
         };
       }
 
@@ -214,36 +192,35 @@ export class RoundController {
       if (!roundState.success) {
         return {
           success: false,
-          error: roundState.error
+          error: roundState.error,
         };
       }
 
       // Get round details with agents
       const { data: round, error } = await supabase
         .from('rounds')
-        .select(`
+        .select(
+          `
           *,
           round_agents!round_id(
             agent_id,
             type
           )
-        `)
+        `
+        )
         .eq('id', roundId)
         .single();
 
       if (error) {
-        return { 
-          success: false, 
-          error: error.message 
+        return {
+          success: false,
+          error: error.message,
         };
       }
 
       // Get all agent details
       const agentIds = round.round_agents?.map((ra: any) => ra.agent_id) || [];
-      const { data: agents } = await supabase
-        .from('agents')
-        .select('*')
-        .in('id', agentIds);
+      const { data: agents } = await supabase.from('agents').select('*').in('id', agentIds);
 
       return {
         success: true,
@@ -252,14 +229,14 @@ export class RoundController {
           agents: agents || [],
           messageHistory: roundState.data?.messageHistory || [],
           activePvPEffects: roundState.data?.activePvPEffects || [],
-          phase: roundState.data?.phase || 'discussion'
-        }
+          phase: roundState.data?.phase || 'discussion',
+        },
       };
     } catch (error) {
       console.error('Error getting round state with agents:', error);
-      return { 
-        success: false, 
-        error: 'Failed to get round state with agents' 
+      return {
+        success: false,
+        error: 'Failed to get round state with agents',
       };
     }
   }
@@ -270,25 +247,25 @@ export class RoundController {
   private cleanExpiredEffects(roundId: number): void {
     const effects = this.activePvPEffects.get(roundId) || [];
     const currentTime = Date.now();
-    
+
     this.activePvPEffects.set(
       roundId,
-      effects.filter(effect => effect.expiresAt > currentTime)
+      effects.filter((effect) => effect.expiresAt > currentTime)
     );
   }
 
   /**
    * Manually removes a PvP effect before expiration
-   */ 
+   */
   public async removePvPEffect(
-    roundId: number, 
+    roundId: number,
     effectId: string,
     useWebSocket: boolean = true
   ): Promise<RoomOperationResult<void>> {
     try {
       const effects = this.activePvPEffects.get(roundId) || [];
-      const effectIndex = effects.findIndex(e => e.effectId === effectId);
-      
+      const effectIndex = effects.findIndex((e) => e.effectId === effectId);
+
       if (effectIndex === -1) {
         return { success: false, error: 'PvP effect not found' };
       }
@@ -301,11 +278,11 @@ export class RoundController {
         if (useWebSocket) {
           const wsMessage: WsMessage = {
             type: 'pvp_effect_removed',
-            effect: removedEffect
+            effect: removedEffect,
           };
           await wsOps.sendMessageToRoom({
             roomId: round.room_id,
-            message: wsMessage
+            message: wsMessage,
           });
         }
         // REST response handled by route handler
@@ -318,13 +295,11 @@ export class RoundController {
     }
   }
 
-  async getRound(roundId: number): Promise<RoomOperationResult<Database['public']['Tables']['rounds']['Row']>> {
+  async getRound(
+    roundId: number
+  ): Promise<RoomOperationResult<Database['public']['Tables']['rounds']['Row']>> {
     try {
-      const { data, error } = await supabase
-        .from('rounds')
-        .select('*')
-        .eq('id', roundId)
-        .single();
+      const { data, error } = await supabase.from('rounds').select('*').eq('id', roundId).single();
 
       if (error) {
         return { success: false, error: error.message };
@@ -344,19 +319,15 @@ export class RoundController {
   }> {
     try {
       const { roundId } = message.content;
-      
+
       // Validate round exists
-      const { data: round } = await supabase
-        .from('rounds')
-        .select('*')
-        .eq('id', roundId)
-        .single();
+      const { data: round } = await supabase.from('rounds').select('*').eq('id', roundId).single();
 
       if (!round) {
         return {
           success: false,
           error: 'Round not found',
-          statusCode: 404
+          statusCode: 404,
         };
       }
 
@@ -365,14 +336,14 @@ export class RoundController {
 
       return {
         success: true,
-        statusCode: 200
+        statusCode: 200,
       };
     } catch (error) {
       console.error('Error processing GM message:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
-        statusCode: 500
+        statusCode: 500,
       };
     }
   }
@@ -384,9 +355,17 @@ export class RoundController {
   async recordAgentDecision(
     roundId: number,
     agentId: number,
-    decision: 1 | 2 | 3 
-  ): Promise<{success: boolean; error?: string; statusCode: number}> {
+    decision: 1 | 2 | 3
+  ): Promise<{ success: boolean; error?: string; statusCode: number }> {
     try {
+      console.log(
+        'recordAgentDecision, logging agent decision roundId',
+        roundId,
+        'agentId',
+        agentId,
+        'decision',
+        decision
+      );
       // Verify round is in CLOSING phase
       const { data: round } = await supabase
         .from('rounds')
@@ -405,32 +384,34 @@ export class RoundController {
       // Record decision with timestamp
       const { error } = await supabase
         .from('round_agents')
-        .update({ 
+        .update({
           outcome: {
             decision,
-            timestamp: Date.now()
-          }
+            timestamp: Date.now(),
+          },
         })
         .eq('round_id', roundId)
         .eq('agent_id', agentId);
 
       if (error) {
+        console.error('Error recording agent decision:', error);
         return {
           success: false,
           error: error.message,
-          statusCode: 500
+          statusCode: 500,
         };
       }
 
       return {
         success: true,
-        statusCode: 200
+        statusCode: 200,
       };
     } catch (error) {
+      console.error('Error recording agent decision (outer):', error);
       return {
-        success: false, 
+        success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
-        statusCode: 500
+        statusCode: 500,
       };
     }
   }
@@ -438,14 +419,12 @@ export class RoundController {
   /** NEW
    * Scans for agents who haven't sent messages recently
    * Triggers notifications for inactive agents
+   * TODO Move me to room controller
    */
-  async checkInactiveAgents(roundId: number): Promise<void> {
+  async checkInactiveAgents(roomId: number): Promise<void> {
     try {
-      const { data: round } = await this.getRound(roundId);
-      if (!round?.active) return;
-
       // Delegate to message handler for actual message checks and notifications
-      await processInactiveAgents(roundId);
+      await processInactiveAgents(roomId);
     } catch (error) {
       console.error('Error initiating inactive agent check:', error);
     }

@@ -205,6 +205,8 @@ export async function messagesRoutes(server: FastifyInstance) {
   }>('/decision', async (request, reply) => {
     try {
       const { messageType, signature, sender, content } = request.body;
+      console.log('Received agent decision', request.body);
+
       if (messageType !== WsMessageTypes.AGENT_DECISION) {
         return reply.status(400).send({
           success: false,

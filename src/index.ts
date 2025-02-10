@@ -3,8 +3,9 @@ import websocket from '@fastify/websocket';
 import { CronJob } from 'cron';
 import fastify from 'fastify';
 import { checkAndCloseRounds, checkAndCreateRounds, syncAgentsWithActiveRounds } from './bg-sync';
-import { wsOps } from './config';
+import { supabase, wsOps } from './config';
 import { startContractEventListener } from './contract-event-listener';
+import { roundController } from './controllers/roundController';
 import { signatureVerificationPlugin } from './middleware/signatureVerification';
 import zodSchemaPlugin from './plugins/zodSchema';
 import roomsRoutes from './rooms';
@@ -13,7 +14,6 @@ import { messagesRoutes } from './routes/messageRoutes';
 import { roundRoutes } from './routes/roundRoutes';
 import { WsMessageTypes } from './types/ws';
 import { AllInputSchemaTypes } from './utils/schemas';
-import { agentMonitorService } from './services/agentMonitorService';
 // Add type declaration for the custom property
 declare module 'fastify' {
   interface FastifyRequest {
@@ -138,8 +138,39 @@ startContractEventListener();
 
 const job = new CronJob('*/25 * * * * *', checkAndCreateRounds);
 job.start();
-const job2 = new CronJob('*/35 * * * * *', checkAndCloseRounds);
+const job2 = new CronJob('*/20 * * * * *', checkAndCloseRounds);
 job2.start();
-const job3 = new CronJob('*/15 * * * * *', syncAgentsWithActiveRounds);
-job3.start();
-agentMonitorService.start();
+// const job3 = new CronJob('*/15 * * * * *', syncAgentsWithActiveRounds);
+// job3.start();
+
+//TODO Below was a hack to debug a repeat loop I was getting with agentMonitorService, should be moved back to agentMonitorService
+const agentMonitorService = async () => {
+  try {
+    // Get all rounds that need monitoring
+    const { data: activeRooms, error } = await supabase
+      .from('rooms')
+      .select(
+        `
+        *,
+        room_agents!inner(id, agent_id, last_message)
+      `
+      )
+      .eq('active', true)
+      .or(`last_message.is.null,last_message.lt.${new Date(Date.now() - 30000).toISOString()}`);
+
+    if (error || !activeRooms?.length) return;
+
+    // Process each active round
+    for (const room of activeRooms) {
+      // Delegates to roundController which:
+      // 1. Verifies round is still active
+      // 2. Calls messageHandler.processInactiveAgents
+      // 3. Handles notification delivery
+      await roundController.checkInactiveAgents(room.id);
+    }
+  } catch (error) {
+    console.error('Error in agent monitor service:', error);
+  }
+};
+const job4 = new CronJob('*/30 * * * * *', agentMonitorService);
+job4.start();

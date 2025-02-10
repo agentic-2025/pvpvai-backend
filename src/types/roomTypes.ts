@@ -39,8 +39,6 @@ export interface RoomOperationResult<T = any> {
 }
 
 // Database types aliases for better readability
-export type DBRoom = Database['public']['Tables']['rooms']['Row'];
-export type DBRoomInsert = Database['public']['Tables']['rooms']['Insert'];
 export type DBRoomAgent = Database['public']['Tables']['room_agents']['Row'];
 
 export enum BetType {

@@ -26,8 +26,4 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- select * from rooms where id = 15;
--- select * from rounds where room_id = 15 and active = true;
--- select * from get_active_rooms_needing_rounds();
---  select * from get_active_rounds_to_close();
 

@@ -7,6 +7,7 @@ import { backendEthersSigningWallet } from './config';
 import { roomAbi } from './types/contract.types';
 import { Database } from './types/database.types';
 import { WsMessageTypes } from './types/ws';
+import { signPayload } from './utils/auth';
 import {
   agentMessageInputSchema,
   gmMessageInputSchema,
@@ -16,7 +17,6 @@ import {
   publicChatMessageInputSchema,
   subscribeRoomInputMessageSchema,
 } from './utils/schemas';
-import { signPayload } from './utils/signer';
 import { sortObjectKeys } from './utils/sortObjectKeys';
 
 const supabase = createClient<Database>(
@@ -498,6 +498,7 @@ async function generateMessages() {
       // Send messages from random connections
       if (roomAndRound && connections.length > 0) {
         const activeConnection = connections[Math.floor(Math.random() * connections.length)];
+
         console.log('activeConnection', activeConnection.wallet.address);
         if (activeConnection.ws.readyState === WebSocket.OPEN) {
           const rand = Math.random();
@@ -514,7 +515,7 @@ async function generateMessages() {
             const content = {
               roomId: roomAndRound.roomId,
               roundId: roomAndRound.roundId,
-              userId: activeConnection.userId,
+              userId: activeConnection?.userId || 1,
               text: getRandomMessage(),
               timestamp: Date.now(),
             };
@@ -589,7 +590,7 @@ async function generateMessages() {
               console.log('activeConnection.wallet.address', activeConnection.wallet.address);
               const message: z.infer<typeof agentMessageInputSchema> = {
                 messageType: WsMessageTypes.AGENT_MESSAGE,
-                sender: agentWallet.address,
+                sender: activeConnection.wallet.address,
                 signature,
                 content: sortObjectKeys(content),
               };
@@ -625,7 +626,6 @@ async function generateMessages() {
                 timestamp: Date.now(),
                 roomId: roomAndRound.roomId,
                 roundId: roomAndRound.roundId,
-                agentId: keyMap[activeConnection.wallet.address] || 57,
                 observationType,
                 data: getRandomObservation(observationType),
               };
@@ -637,8 +637,8 @@ async function generateMessages() {
               const observationMessage = observationMessageInputSchema.parse({
                 messageType: 'observation',
                 sender: activeConnection.wallet.address,
-                signature: await signMessage(validatedData),
-                content: validatedData,
+                signature: signature,
+                content: content,
               });
 
               console.log('Sending observation message with content:', observationMessage);

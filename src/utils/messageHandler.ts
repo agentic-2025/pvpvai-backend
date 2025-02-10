@@ -21,6 +21,7 @@
 import axios, { AxiosError } from 'axios';
 import { z } from 'zod';
 import { backendEthersSigningWallet, supabase, wsOps } from '../config';
+import { applyPvp } from '../pvp';
 import { roomService } from '../services/roomService';
 import { roundService } from '../services/roundService';
 import { Tables } from '../types/database.types';
@@ -35,7 +36,6 @@ import {
   observationMessageInputSchema,
 } from './schemas';
 import { roundAndAgentsPreflight } from './validation';
-import { applyPvp } from '../pvp';
 
 // Add address validation helper
 function isValidEthereumAddress(address: string): boolean {
@@ -57,31 +57,46 @@ const DECISION_CHECK_INTERVAL = 10000; // Check every 10 seconds
  * 3. Creates context from recent discussion
  * 4. Notifies agents who haven't sent messages within threshold
  */
-export async function processInactiveAgents(roundId: number): Promise<void> {
+export async function processInactiveAgents(roomId: number): Promise<void> {
   try {
     const now = new Date();
-    const thresholdDate = new Date(now.getTime() - INACTIVITY_THRESHOLD);
+    // Convert to ISO string for PostgreSQL compatibility
+    const thresholdDate = new Date(now.getTime() - INACTIVITY_THRESHOLD).toISOString();
+    console.log('processInactiveAgents, thresholdDate', thresholdDate, 'roomId', roomId);
 
-    // Get all agents in round with their details and last messages
-    const { data: roundAgents, error } = await supabase
-      .from('round_agents')
+    // Modified query to only get room_agents that have actual records
+    const { data: inactiveRoomAgents, error } = await supabase
+      .from('room_agents')
       .select(
         `
         id,
         agent_id,
         last_message,
-        kicked,
-        agents!round_agents_agent_id_fkey (
+        agents!room_agents_agent_id_fkey (
           display_name,
           type
         )
       `
       )
-      .eq('round_id', roundId)
-      .eq('kicked', false);
+      .eq('room_id', roomId)
+      .lt('last_message', thresholdDate) // Using ISO string format
+      .not('last_message', 'is', null); // Only get records that have a last_message
 
-    if (error || !roundAgents) {
-      console.error('Error fetching round agents:', error);
+    if (error || !inactiveRoomAgents) {
+      console.error('processInactiveAgents, error fetching round agents:', error);
+      return;
+    }
+
+    // Get latest round for room
+    const { data: round, error: roundError } = await supabase
+      .from('rounds')
+      .select('*')
+      .eq('room_id', roomId)
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    if (roundError || !round) {
+      console.error('processInactiveAgents, error fetching round:', roundError);
       return;
     }
 
@@ -97,16 +112,9 @@ export async function processInactiveAgents(roundId: number): Promise<void> {
         )
       `
       )
-      .eq('round_id', roundId)
+      .eq('round_id', roomId)
       .order('created_at', { ascending: false })
       .limit(10);
-
-    // Filter inactive agents
-    const inactiveAgents = roundAgents.filter((agent) => {
-      if (!agent.last_message) return true;
-      const lastMessageDate = new Date(agent.last_message);
-      return lastMessageDate < thresholdDate;
-    });
 
     // Format recent messages context with proper type checking
     const messageContext =
@@ -128,11 +136,11 @@ export async function processInactiveAgents(roundId: number): Promise<void> {
         .join('\n') || 'No recent messages';
 
     // Notify each inactive agent
-    for (const agent of inactiveAgents) {
-      await notifyInactiveAgent(roundId, agent.agent_id, messageContext);
+    for (const agent of inactiveRoomAgents) {
+      await notifyInactiveAgent(roomId, agent.agent_id, messageContext);
     }
   } catch (error) {
-    console.error('Error processing inactive agents:', error);
+    console.error('processInactiveAgents, error processing inactive agents:', error);
   }
 }
 
@@ -147,6 +155,7 @@ async function notifyInactiveAgent(
   messageContext: string
 ): Promise<void> {
   try {
+    console.log('notifyInactiveAgent, roundId', roundId, 'agentId', agentId);
     const { data: round } = await supabase.from('rounds').select('*').eq('id', roundId).single();
 
     if (!round) return;
@@ -343,6 +352,19 @@ export async function processAgentMessage(
       reason: roundReason,
     } = await roundAndAgentsPreflight(roundId);
 
+    const { error } = await supabase
+      .from('room_agents')
+      .update({
+        last_message: new Date().toISOString(),
+      })
+      .eq('room_id', roomId)
+      .eq('agent_id', message.content.agentId)
+      .single();
+
+    if (error) {
+      console.error('Error updating room_agents last_message, but continuing:', error);
+    }
+
     const agentKeys = await supabase
       .from('room_agents')
       .select('wallet_address, agent_id, agents(eth_wallet_address)')
@@ -417,15 +439,16 @@ export async function processAgentMessage(
 
     // Create map of agent IDs to wallet addresses for PvP, filtering out null values
     const agentAddresses = new Map(
-      agentKeys.data?.filter(agent => agent.wallet_address != null)
-        .map(agent => [agent.agent_id, agent.wallet_address as string]) || []
+      agentKeys.data
+        ?.filter((agent) => agent.wallet_address != null)
+        .map((agent) => [agent.agent_id, agent.wallet_address as string]) || []
     );
 
     // Apply PvP effects to the message
     const pvpResult = await applyPvp(
       message,
       message.content.agentId,
-      agents.map(a => a.id).filter(id => id !== message.content.agentId),
+      agents.map((a) => a.id).filter((id) => id !== message.content.agentId),
       room.contract_address,
       agentAddresses
     );
@@ -448,9 +471,10 @@ export async function processAgentMessage(
       if (agent.id === message.content.agentId) {
         continue;
       }
-      
+
       const postPvpMessage = postPvpMessages[agent.id];
-      if (postPvpMessage) { // Skip if target is deafened
+      if (postPvpMessage) {
+        // Skip if target is deafened
         await sendMessageToAgent({
           agent,
           message: {
@@ -807,9 +831,15 @@ export async function sendMessageToAgent(params: {
     // TODO don't wait for response, or you'll loop. Can fix this w/ async callback later when we implement WS
     axios.post(endpointUrl.toString(), params.message).catch((err) => {
       if (err instanceof AxiosError) {
-        console.error('Error sending message to agent (catch block):', err.response?.data);
+        console.error(
+          `Error sending message to agent ${params.agent.id} at ${params.agent.endpoint} (catch block, axios):`,
+          err.response?.data
+        );
       } else {
-        console.error('Error sending message to agent (catch block):', err);
+        console.error(
+          `Error sending message to agent ${params.agent.id} at ${params.agent.endpoint} (catch block):`,
+          err
+        );
       }
     });
     console.log('Message sent to agent', params.agent.id, 'endpoint', params.agent.endpoint);

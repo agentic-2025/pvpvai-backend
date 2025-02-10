@@ -51,26 +51,7 @@ export class AgentMonitorService {
       this.stop(); // Ensure clean state
   
       this.checkInterval = setInterval(async () => {
-        try {
-          // Get all rounds that need monitoring
-          const { data: activeRounds, error } = await supabase
-            .from('rounds')
-            .select('*')
-            .eq('active', true);
-
-          if (error || !activeRounds?.length) return;
-
-          // Process each active round
-          for (const round of activeRounds) {
-            // Delegates to roundController which:
-            // 1. Verifies round is still active
-            // 2. Calls messageHandler.processInactiveAgents
-            // 3. Handles notification delivery
-            await roundController.checkInactiveAgents(round.id);
-          }
-        } catch (error) {
-          console.error('Error in agent monitor service:', error);
-        }
+        
       }, this.CHECK_INTERVAL_MS);
     }
   

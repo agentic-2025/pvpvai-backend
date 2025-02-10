@@ -1,13 +1,12 @@
 import { RoomService } from '../services/roomService';
-import { DBRoomAgent, RoomOperationResult } from '../types/roomTypes';
-import { supabase } from '../config';
-import { PostgrestError } from '@supabase/supabase-js';
 import { Database } from '../types/database.types';
+import { DBRoomAgent, RoomOperationResult } from '../types/roomTypes';
 
 // Initialize service instance
 const roomService = new RoomService();
 
 export class RoomController {
+  //TODO This was commented out in a rush because we didn't have time to fix type errors, need to come back to it.
   // async setupRoom({
   //   content,
   //   creator_address,
@@ -75,13 +74,10 @@ export class RoomController {
   //   }
   // }
 
-  async isAgentInRoom(roomId: number, agentId: number): Promise<RoomOperationResult<boolean>> {
-    return await roomService.isAgentInRoom(roomId, agentId);
-  }
 
   async addAgentToRoom(
-    roomId: number, 
-    agentId: number, 
+    roomId: number,
+    agentId: number,
     walletAddress: string,
     endpoint?: string // Make endpoint optional
   ): Promise<RoomOperationResult<DBRoomAgent>> {
@@ -99,10 +95,7 @@ export class RoomController {
     return await roomService.addAgentToRoom(roomId, agentId, walletAddress, endpoint);
   }
 
-  // Add method to get room agents
-  async getRoomAgents(roomId: number): Promise<RoomOperationResult<DBRoomAgent[]>> {
-    return await roomService.getRoomAgents(roomId);
-  }
+
 
   async bulkAddAgentsToRoom(
     roomId: number,
@@ -122,8 +115,8 @@ export class RoomController {
   }
 
   async updateOrAddAgentToRoom(
-    roomId: number, 
-    agentId: number, 
+    roomId: number,
+    agentId: number,
     walletAddress: string,
     endpoint?: string
   ): Promise<RoomOperationResult<DBRoomAgent>> {
@@ -139,101 +132,24 @@ export class RoomController {
 
     // First try to update existing entry
     const updateResult = await roomService.updateAgentInRoom(
-      roomId, 
-      agentId, 
-      walletAddress, 
+      roomId,
+      agentId,
+      walletAddress,
       endpoint
     );
- 
+
     // If no existing entry, create new one
     if (!updateResult.success) {
-      return await roomService.addAgentToRoom(
-        roomId, 
-        agentId, 
-        walletAddress, 
-        endpoint
-      );
+      return await roomService.addAgentToRoom(roomId, agentId, walletAddress, endpoint);
     }
 
     return updateResult;
   }
 
-  async handleAgentSubscription(
-    roomId: number,
-    agentId: number,
-    walletAddress: string,
-    endpoint?: string
-  ): Promise<RoomOperationResult<DBRoomAgent>> {
-    try {
-      // Execute operations sequentially instead of using transaction
-      const { data: existingAgent, error: lookupError } = await supabase
-        .from('room_agents')
-        .select('*')
-        .eq('room_id', roomId)
-        .eq('agent_id', agentId) 
-        .single();
-
-      // Add/Update room_agents
-      const { data: roomAgent, error: roomAgentError } = await supabase
-        .from('room_agents')
-        .upsert({
-          room_id: roomId,
-          agent_id: agentId,
-          wallet_address: walletAddress,
-          endpoint: endpoint,
-          // Preserve existing fields if they exist
-          created_at: existingAgent?.created_at,
-          updated_at: new Date().toISOString(),
-          id: existingAgent?.id,
-          wallet_json: existingAgent?.wallet_json || {}
-        })
-        .select()
-        .single();
-
-      if (roomAgentError) throw roomAgentError;
-
-      // Get active round
-      const { data: round, error: roundError } = await supabase
-        .from('rounds')
-        .select('id')
-        .eq('room_id', roomId)
-        .eq('active', true)
-        .single();
-
-      if (roundError && roundError.code !== 'PGRST116') throw roundError;
-
-      if (round) {
-        // Add to round_agents if there's an active round
-        const { error: roundAgentError } = await supabase
-          .from('round_agents')
-          .upsert({
-            round_id: round.id,
-            agent_id: agentId,
-            type: 'AGENT'
-          });
-
-        if (roundAgentError) throw roundAgentError;
-      }
-
-      if (!roomAgent) {
-        throw new Error('Failed to create or update room agent');
-      }
-
-      return {
-        success: true,
-        data: roomAgent
-      };
-    } catch (error) {
-      console.error('Error in agent subscription:', error);
-      return {
-        success: false,
-        error: error instanceof PostgrestError ? error.message : 'Failed to subscribe agent'
-      };
-    }
-  }
-
   // Add findRoomById method to match RoomService
-  async findRoomById(roomId: number): Promise<RoomOperationResult<Database['public']['Tables']['rooms']['Row']>> {
+  async findRoomById(
+    roomId: number
+  ): Promise<RoomOperationResult<Database['public']['Tables']['rooms']['Row']>> {
     return await roomService.findRoomById(roomId);
   }
 }

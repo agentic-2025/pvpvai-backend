@@ -80,11 +80,27 @@ export type Database = {
           },
         ]
       }
+      drop_me_customers: {
+        Row: {
+          id: number
+          metadata: Json | null
+        }
+        Insert: {
+          id?: number
+          metadata?: Json | null
+        }
+        Update: {
+          id?: number
+          metadata?: Json | null
+        }
+        Relationships: []
+      }
       room_agents: {
         Row: {
           agent_id: number
           created_at: string
           id: number
+          last_message: string | null
           room_id: number
           updated_at: string
           wallet_address: string | null
@@ -94,6 +110,7 @@ export type Database = {
           agent_id: number
           created_at?: string
           id?: number
+          last_message?: string | null
           room_id: number
           updated_at?: string
           wallet_address?: string | null
@@ -103,6 +120,7 @@ export type Database = {
           agent_id?: number
           created_at?: string
           id?: number
+          last_message?: string | null
           room_id?: number
           updated_at?: string
           wallet_address?: string | null
@@ -298,7 +316,6 @@ export type Database = {
           created_at: string
           id: number
           kicked: boolean
-          last_message: string | null
           mute_until: string | null
           outcome: Json | null
           round_id: number
@@ -309,7 +326,6 @@ export type Database = {
           created_at?: string
           id?: number
           kicked?: boolean
-          last_message?: string | null
           mute_until?: string | null
           outcome?: Json | null
           round_id: number
@@ -320,7 +336,6 @@ export type Database = {
           created_at?: string
           id?: number
           kicked?: boolean
-          last_message?: string | null
           mute_until?: string | null
           outcome?: Json | null
           round_id?: number
@@ -386,7 +401,7 @@ export type Database = {
           message: Json | null
           round_id: number
           updated_at: string
-          user_id: number
+          user_id: number | null
         }
         Insert: {
           connection_id?: string | null
@@ -395,7 +410,7 @@ export type Database = {
           message?: Json | null
           round_id: number
           updated_at?: string
-          user_id: number
+          user_id?: number | null
         }
         Update: {
           connection_id?: string | null
@@ -404,7 +419,7 @@ export type Database = {
           message?: Json | null
           round_id?: number
           updated_at?: string
-          user_id?: number
+          user_id?: number | null
         }
         Relationships: [
           {
@@ -546,6 +561,33 @@ export type Database = {
           agent_id: number
           wallet_address: string
         }[]
+      }
+      json_matches_schema: {
+        Args: {
+          schema: Json
+          instance: Json
+        }
+        Returns: boolean
+      }
+      jsonb_matches_schema: {
+        Args: {
+          schema: Json
+          instance: Json
+        }
+        Returns: boolean
+      }
+      jsonschema_is_valid: {
+        Args: {
+          schema: Json
+        }
+        Returns: boolean
+      }
+      jsonschema_validation_errors: {
+        Args: {
+          schema: Json
+          instance: Json
+        }
+        Returns: string[]
       }
     }
     Enums: {

@@ -1,5 +1,6 @@
 import { Wallet, getBytes, hashMessage, recoverAddress } from 'ethers';
-import { backendEthersSigningWallet } from '../config';
+import { sortObjectKeys } from './sortObjectKeys';
+import { SIGNER_PRIVATE_KEY } from '../config';
 
 type VerificationResult = {
   signer: string;
@@ -71,15 +72,47 @@ export const verifySignedMessage = (
   };
 };
 
-export const signMessage = async (
-  messageContent: any,
-  wallet: Wallet = backendEthersSigningWallet
-): Promise<string> => {
-  // *** Deterministic Stringification (CRITICAL) ***
-  const messageString = JSON.stringify(sortObjectKeys(messageContent));
+/**
+ * Signs a payload after sorting its keys.
+ * This ensures a deterministic string representation for signing.
+ */
+export async function signPayload(wallet: Wallet, payload: any): Promise<string> {
+  const sortedPayload = sortObjectKeys(payload);
+  const payloadStr = JSON.stringify(sortedPayload);
+  return wallet.signMessage(payloadStr);
+}
 
-  // Sign the message using ethers
-  const signature = await wallet.signMessage(messageString);
 
-  return signature;
-};
+export const signMessage = async (content: MessageContent, privateKey: string = SIGNER_PRIVATE_KEY || ""): Promise<string> => {
+  try {
+    // Extract only the fields that should be signed
+    const signedContent = {
+      timestamp: content.timestamp,
+      roomId: content.roomId,
+      roundId: content.roundId,
+      agentId: content.agentId,
+      text: content.text,
+    };
+
+    // Use deterministic stringification
+    const messageString = JSON.stringify(sortObjectKeys(signedContent));
+
+    // Create wallet and sign
+    const wallet = new Wallet(privateKey);
+    const signature = await wallet.signMessage(messageString);
+
+    return signature;
+  } catch (error) {
+    throw new Error(
+      `Failed to sign message: ${error instanceof Error ? error.message : 'Unknown error'}`
+    );
+  }
+}; // TODO this is not a backend script, but a sig POC
+
+export interface MessageContent {
+  timestamp: number;
+  roomId: string;
+  roundId: string;
+  agentId: string;
+  text: string;
+}

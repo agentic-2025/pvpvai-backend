@@ -6,12 +6,9 @@ import { getRoomContract } from './room-contract';
 import { Database } from './types/database.types';
 import { WsMessageTypes } from './types/ws';
 import { processGmMessage } from './utils/messageHandler';
-import {
-  gmInstructDecisionInputSchema,
-  gmMessageAiChatOutputSchema,
-  gmMessageInputSchema,
-} from './utils/schemas';
+import { gmMessageAiChatOutputSchema, gmMessageInputSchema } from './utils/schemas';
 import { sortObjectKeys } from './utils/sortObjectKeys';
+import { RoundState } from './rooms';
 
 const HARDCODED_GM_ID = 57;
 export async function syncAgentsWithActiveRounds() {
@@ -45,6 +42,61 @@ export async function syncAgentsWithActiveRounds() {
         roomId,
         roundId,
       });
+      console.log('syncing agent response', response.data);
+    } catch (error) {
+      if (error instanceof AxiosError) {
+        console.error(
+          'Error syncing agent',
+          roundAgent.agents.id,
+          'at',
+          roundAgent.agents.endpoint,
+          error.response?.data
+        );
+      } else {
+        console.error(
+          'Error syncing agent',
+          roundAgent.agents.id,
+          'at',
+          roundAgent.agents.endpoint,
+          error
+        );
+      }
+    }
+  }
+}
+
+export async function checkAgentsForNudge() {
+  const { data: roundAgents, error } = await supabase
+    .from('round_agents')
+    .select('*, agents(*), rounds(rooms(*))')
+    .eq('rounds.active', true)
+    .eq('rounds.rooms.active', true);
+
+  if (error) {
+    console.error('Error fetching agents in active rounds:', error);
+    return;
+  }
+
+  const handledAgents = new Set<number>();
+  for (const roundAgent of roundAgents) {
+    try {
+      if (handledAgents.has(roundAgent.agents.id)) {
+        continue;
+      }
+      handledAgents.add(roundAgent.agents.id);
+      console.log('syncing agent', roundAgent.agents.id, 'at', roundAgent.agents.endpoint);
+      const roomId = roundAgent.rounds?.rooms?.id;
+      if (!roomId) {
+        // console.error('Room ID not found for round agent', roundAgent.id);
+        continue;
+      }
+      const roundId = roundAgent.round_id;
+      const url = new URL('forceRoundSync', roundAgent.agents.endpoint).toString();
+      const response = await axios.post(url, {
+        roomId,
+        roundId,
+      });
+      console.log('syncing agent response', response.data);
     } catch (error) {
       if (error instanceof AxiosError) {
         console.error(
@@ -149,12 +201,24 @@ export async function createNewRound(
       targets: [],
       message: 'All agents have been reinitialized for the new round',
     });
+    const { error: updateError3 } = await supabase
+      .from('rounds')
+      .update({ status: 'OPEN' })
+      .eq('id', newRound.id)
+      .eq('active', true);
+    console.log('Updated round #', newRound.id, 'to OPEN');
+    if (updateError3) {
+      console.error('Error updating round to set started:', updateError3);
+    }
+
     return;
   } catch (error) {
     console.error('Error in createNewRound:', error); // TODO turn back on if needed
   }
 }
 
+
+//Query the rounds that need to be closed and close them.
 export async function checkAndCloseRounds() {
   try {
     // Query rounds that needs to be closed
@@ -223,8 +287,7 @@ export async function closeRound(
   }
 
   const contract = getRoomContract(round.contract_address);
-  const processing = 2;
-  const tx = await contract.setCurrentRoundState(processing);
+  const tx = await contract.setCurrentRoundState(RoundState.Processing);
   // const tx = await contract.performUpKeep(ethers.toUtf8Bytes(''));
   const receipt = await tx.wait();
 
@@ -252,7 +315,9 @@ export async function closeRound(
     return;
   }
 
-  console.log(agents);
+  // console.log('agentIds', agentIds);
+  console.log('Agents who need to submit desicisons on round #', round.id, ':', agentIds);
+  // console.log('Agents who need to submit desicisons:', agents);
 
   // return;
   // console.log(receipt);
@@ -282,35 +347,35 @@ export async function closeRound(
   await processGmMessage(message);
 
   for (const agent of agents) {
-    const url = new URL('messages/gmInstructDecision', agent.endpoint).toString();
-    console.log('Telling agent #', agent.id, 'at', url, 'to submit their decision');
-    axios
-      .post(url, {
-        messageType: WsMessageTypes.GM_INSTRUCT_DECISION,
-        sender: backendEthersSigningWallet.address,
-        signature: Date.now().toString(),
-        content: sortObjectKeys({
-          roomId: round.room_id,
-          roundId: round.id,
-        }),
-      } satisfies z.infer<typeof gmInstructDecisionInputSchema>)
-      .catch((error) => {
-        console.error(
-          'Error telling agent #',
-          agent.id,
-          'at',
-          url,
-          'to submit their decision:',
-          error
-        );
-      });
-    console.log(
-      'Finished telling agent #',
-      agent.id,
-      'at',
-      agent.endpoint,
-      'to submit their decision'
-    );
+    // const url = new URL('messages/gmInstructDecision', agent.endpoint).toString();
+    // console.log('Telling agent #', agent.id, 'at', url, 'to submit their decision');
+    // axios
+    //   .post(url, {
+    //     messageType: WsMessageTypes.GM_INSTRUCT_DECISION,
+    //     sender: backendEthersSigningWallet.address,
+    //     signature: Date.now().toString(),
+    //     content: sortObjectKeys({
+    //       roomId: round.room_id,
+    //       roundId: round.id,
+    //     }),
+    //   } satisfies z.infer<typeof gmInstructDecisionInputSchema>)
+    //   .catch((error) => {
+    //     console.error(
+    //       'Error telling agent #',
+    //       agent.id,
+    //       'at',
+    //       url,
+    //       'to submit their decision:',
+    //       error
+    //     );
+    //   });
+    // console.log(
+    //   'Finished telling agent #',
+    //   agent.id,
+    //   'at',
+    //   agent.endpoint,
+    //   'to submit their decision'
+    // );
   }
 
   // Just sends a gm message to ai chat to tell them what's happen
@@ -387,7 +452,7 @@ export async function closeRound(
   const signature2 = await backendEthersSigningWallet.signMessage(
     JSON.stringify(sortObjectKeys(content))
   );
-  // send a message to the agent
+  // send a message to agents
   await processGmMessage({
     messageType: WsMessageTypes.GM_MESSAGE,
     signature: signature2,

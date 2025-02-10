@@ -150,49 +150,6 @@ export async function roomRoutes(server: FastifyInstance) {
     }
   );
 
-  // Create a new round in a room
-  // This route is used by the GameMasterClient to create a new round in a specific room
-  server.post<{
-    Params: { roomId: string };
-    Body: {
-      game_master_id?: number;
-      round_config?: any;
-    };
-  }>(
-    '/:roomId/rounds',
-    {
-      schema: {
-        params: {
-          type: 'object',
-          required: ['roomId'],
-          properties: {
-            roomId: { type: 'string', pattern: '^[0-9]+$' },
-          },
-        },
-        body: {
-          type: 'object',
-          properties: {
-            game_master_id: { type: 'number' },
-            round_config: { type: 'object', additionalProperties: true },
-          },
-        },
-      },
-    },
-    async (request, reply) => {
-      const roomId = parseInt(request.params.roomId);
-      try {
-        const result = await roundController.createRound(roomId, request.body);
-        if (!result.success) {
-          return reply.status(400).send({ error: result.error });
-        }
-        return reply.status(201).send(result.data);
-      } catch (error) {
-        console.error('Error creating round:', error);
-        return reply.status(500).send({ error: 'Internal server error' });
-      }
-    }
-  );
-
   // Get room details
   server.get<{
     Params: { roomId: string };
