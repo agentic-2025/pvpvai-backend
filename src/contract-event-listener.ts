@@ -2,18 +2,19 @@
 import { ethers } from 'ethers';
 import { z } from 'zod';
 import { supabase, wsOps } from './config';
-import { roomAbi } from './types/contract.types';
-import { Database } from './types/database.types';
-import { PvpActionCategories, PvpActions } from './types/pvp';
-import { WsMessageTypes } from './types/ws';
 import {
-  PvpAllPvpActionsType,
   attackActionSchema,
   deafenStatusSchema,
   poisonStatusSchema,
+  PvpActionCategories,
   pvpActionEnactedAiChatOutputSchema,
+  PvpActions,
+  PvpAllPvpActionsType,
   silenceStatusSchema,
-} from './utils/schemas';
+} from './schemas/pvp';
+import { WsMessageTypes } from './schemas/wsServer';
+import { roomAbi } from './types/contract.types';
+import { Database } from './types/database.types';
 
 const HARDCODED_ROOM = 16;
 const HARDCODED_ROOM_ADDRESS = '0x1698f764C1d34315698D9D96Ded939e24587a3fB';

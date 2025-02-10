@@ -8,10 +8,10 @@ import { agentMessageInputSchema } from './schemas/agentMessage';
 import {
   participantsInputMessageSchema,
   subscribeRoomInputMessageSchema,
+  WsMessageTypes,
 } from './schemas/wsServer';
 import { roomAbi } from './types/contract.types';
 import { Database } from './types/database.types';
-import { WsMessageTypes } from './types/ws';
 import { signPayload } from './utils/auth';
 import {
   gmMessageInputSchema,

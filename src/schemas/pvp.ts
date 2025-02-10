@@ -13,9 +13,8 @@
 // PvP action types have been largely moved to the schemas file. Only enums remain.
 
 import { z } from 'zod';
-import { WsMessageTypes } from '../types/ws';
-import { authenticatedMessageSchema } from '../utils/schemas';
-
+import { authenticatedMessageSchema } from './common';
+import { WsMessageTypes } from './wsServer';
 // High level description of the type of action being taken
 export enum PvpActionCategories {
   DIRECT_ACTION = 'DIRECT_ACTION', // Direct/single use actions
@@ -74,7 +73,6 @@ export const attackActionSchema = z.object({
 });
 export type PvpAttackActionType = z.infer<typeof attackActionSchema>;
 
-
 export const deceiveStatusSchema = z.object({
   actionType: z.literal(PvpActions.DECEIVE),
   actionCategory: z.literal(PvpActionCategories.STATUS_EFFECT),
@@ -86,7 +84,6 @@ export const deceiveStatusSchema = z.object({
 });
 export type PvpDeceiveStatusType = z.infer<typeof deceiveStatusSchema>;
 
-
 export const blindStatusSchema = z.object({
   actionType: z.literal(PvpActions.BLIND),
   actionCategory: z.literal(PvpActionCategories.STATUS_EFFECT),
@@ -96,7 +93,6 @@ export const blindStatusSchema = z.object({
   }),
 });
 export type PvpBlindStatusType = z.infer<typeof blindStatusSchema>;
-
 
 export const silenceStatusSchema = z.object({
   actionType: z.literal(PvpActions.SILENCE),
@@ -108,7 +104,6 @@ export const silenceStatusSchema = z.object({
 });
 export type PvpSilenceStatusType = z.infer<typeof silenceStatusSchema>;
 
-
 export const deafenStatusSchema = z.object({
   actionType: z.literal(PvpActions.DEAFEN),
   actionCategory: z.literal(PvpActionCategories.STATUS_EFFECT),
@@ -118,7 +113,6 @@ export const deafenStatusSchema = z.object({
   }),
 });
 export type PvpDeafenStatusType = z.infer<typeof deafenStatusSchema>;
-
 
 export const poisonStatusSchema = z.object({
   actionType: z.literal(PvpActions.POISON),
@@ -132,7 +126,6 @@ export const poisonStatusSchema = z.object({
   }),
 });
 export type PvpPoisonStatusType = z.infer<typeof poisonStatusSchema>;
-
 
 // Combine all action schemas
 export const pvpActionSchema = z.discriminatedUnion('actionType', [

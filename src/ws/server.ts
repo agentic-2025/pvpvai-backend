@@ -3,11 +3,12 @@ import { WebSocket } from 'ws';
 import { z } from 'zod';
 import { supabase } from '../config';
 import {
+  heartbeatOutputMessageSchema,
   participantsOutputMessageSchema,
   systemNotificationOutputSchema,
+  WsMessageTypes,
 } from '../schemas/wsServer';
-import { WsMessageTypes } from '../types/ws';
-import { AllInputSchemaTypes, heartbeatOutputMessageSchema } from '../utils/schemas';
+import { AllInputSchemaTypes } from '../utils/schemas';
 import { wsOps } from './operations';
 
 export type RoomMap = Map<number, Set<WebSocket>>;

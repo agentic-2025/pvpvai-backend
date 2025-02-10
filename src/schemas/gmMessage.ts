@@ -9,7 +9,7 @@
 */
 import { z } from 'zod';
 import { authenticatedMessageSchema } from '../schemas/common';
-import { WsMessageTypes } from '../types/ws';
+import { WsMessageTypes } from './wsServer';
 
 export const gmMessageInputSchema = authenticatedMessageSchema.extend({
   messageType: z.literal(WsMessageTypes.GM_MESSAGE),

@@ -28,7 +28,7 @@ async function createAgent(options: {
     };
 
     const timestamp = Date.now();
-    const signature = await signMessage(content, wallet);
+    const signature = await signMessage(content, wallet.privateKey);
 
     const requestBody = {
       content,

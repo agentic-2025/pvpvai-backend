@@ -1,5 +1,4 @@
 import { Wallet, getBytes, hashMessage, recoverAddress } from 'ethers';
-import { sortObjectKeys } from './sortObjectKeys';
 import { SIGNER_PRIVATE_KEY } from '../config';
 
 type VerificationResult = {
@@ -8,7 +7,7 @@ type VerificationResult = {
 };
 
 // Helper function for deterministic stringification (MUST MATCH CLIENT)
-function sortObjectKeys(obj: any): any {
+export function sortObjectKeys(obj: any): any {
   if (typeof obj !== 'object' || obj === null) {
     return obj; // Return as is if not an object
   }
@@ -82,20 +81,13 @@ export async function signPayload(wallet: Wallet, payload: any): Promise<string>
   return wallet.signMessage(payloadStr);
 }
 
-
-export const signMessage = async (content: MessageContent, privateKey: string = SIGNER_PRIVATE_KEY || ""): Promise<string> => {
+export const signMessage = async (
+  content: object,
+  privateKey: string = SIGNER_PRIVATE_KEY || ''
+): Promise<string> => {
   try {
-    // Extract only the fields that should be signed
-    const signedContent = {
-      timestamp: content.timestamp,
-      roomId: content.roomId,
-      roundId: content.roundId,
-      agentId: content.agentId,
-      text: content.text,
-    };
-
     // Use deterministic stringification
-    const messageString = JSON.stringify(sortObjectKeys(signedContent));
+    const messageString = JSON.stringify(sortObjectKeys(content));
 
     // Create wallet and sign
     const wallet = new Wallet(privateKey);
@@ -108,11 +100,3 @@ export const signMessage = async (content: MessageContent, privateKey: string = 
     );
   }
 }; // TODO this is not a backend script, but a sig POC
-
-export interface MessageContent {
-  timestamp: number;
-  roomId: string;
-  roundId: string;
-  agentId: string;
-  text: string;
-}

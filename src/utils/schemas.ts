@@ -4,26 +4,27 @@ import {
   agentMessageAiChatOutputSchema,
   agentMessageInputSchema,
 } from '../schemas/agentMessage';
+import { authenticatedMessageSchema, validEthereumAddressSchema } from '../schemas/common';
+import {
+  gmMessageAgentOutputSchema,
+  gmMessageAiChatOutputSchema,
+  gmMessageInputSchema,
+} from '../schemas/gmMessage';
+import {
+  observationMessageAgentOutputSchema,
+  observationMessageAiChatOutputSchema,
+  observationMessageInputSchema,
+} from '../schemas/observationsMessage';
+import { publicChatMessageInputSchema, publicChatMessageOutputSchema } from '../schemas/publicChat';
+import { pvpActionEnactedAiChatOutputSchema } from '../schemas/pvp';
 import {
   heartbeatInputMessageSchema,
   participantsInputMessageSchema,
   participantsOutputMessageSchema,
   subscribeRoomInputMessageSchema,
   systemNotificationOutputSchema,
+  WsMessageTypes,
 } from '../schemas/wsServer';
-import { WsMessageTypes } from '../types/ws';
-import { pvpActionEnactedAiChatOutputSchema } from '../schemas/pvp';
-import { observationMessageAgentOutputSchema, observationMessageAiChatOutputSchema, observationMessageInputSchema } from '../schemas/observationsMessage';
-import { gmMessageAiChatOutputSchema } from '../schemas/gmMessage';
-import { gmMessageAgentOutputSchema } from '../schemas/gmMessage';
-import { gmMessageInputSchema } from '../schemas/gmMessage';
-import { authenticatedMessageSchema } from '../schemas/common';
-import { validEthereumAddressSchema } from '../schemas/common';
-import { publicChatMessageInputSchema } from '../schemas/publicChat';
-import { publicChatMessageOutputSchema } from '../schemas/publicChat';
-
-
-
 
 // Response to every POST request to /messages
 export const messagesRestResponseSchema = z.object({
@@ -70,7 +71,6 @@ export const roomConfigSchema = z.object({
     enabled_rules: z.array(z.string()),
   }),
 });
-
 
 export const roomSetupContentSchema = z.object({
   timestamp: z.number(),
@@ -129,7 +129,6 @@ export const agentBulkAddSchema = z.object({
 //     ]),
 //   }),
 // });
-
 
 // Update the interface to use the schema type
 

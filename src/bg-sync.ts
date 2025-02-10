@@ -1,14 +1,14 @@
-import { backendEthersSigningWallet, supabase, wsOps } from './config';
+import { backendEthersSigningWallet, supabase } from './config';
 // import { roundService } from '../services/roundService';
 import axios, { AxiosError } from 'axios';
 import { z } from 'zod';
-import { getRoomContract } from './room-contract';
-import { Database } from './types/database.types';
-import { WsMessageTypes } from './types/ws';
-import { processGmMessage } from './utils/messageHandler';
-import { gmMessageAiChatOutputSchema, gmMessageInputSchema } from './utils/schemas';
-import { sortObjectKeys } from './utils/sortObjectKeys';
+import { getRoomContract } from './contract-event-listener';
 import { RoundState } from './rooms';
+import { gmMessageAiChatOutputSchema, gmMessageInputSchema } from './schemas/gmMessage';
+import { WsMessageTypes } from './schemas/wsServer';
+import { Database } from './types/database.types';
+import { sortObjectKeys } from './utils/auth';
+import { processGmMessage } from './utils/messageHandler';
 import { wsServer } from './ws/server';
 
 const HARDCODED_GM_ID = 57;
@@ -217,7 +217,6 @@ export async function createNewRound(
     console.error('Error in createNewRound:', error); // TODO turn back on if needed
   }
 }
-
 
 //Query the rounds that need to be closed and close them.
 export async function checkAndCloseRounds() {

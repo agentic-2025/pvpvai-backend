@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { Wallet } from 'ethers';
 import { z } from 'zod';
-import { WsMessageTypes } from '../types/ws';
+import { WsMessageTypes } from '../schemas/wsServer';
 import { gmMessageInputSchema } from '../utils/schemas';
 import { sortObjectKeys } from '../utils/sortObjectKeys';
 

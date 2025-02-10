@@ -1,7 +1,6 @@
 import { z } from 'zod';
-import { WsMessageTypes } from '../types/ws';
-import { authenticatedMessageSchema } from '../utils/schemas';
-
+import { authenticatedMessageSchema } from './common';
+import { WsMessageTypes } from './wsServer';
 /*
 --- AGENT MESSAGES SCHEMA ---
   Sent by:

@@ -24,15 +24,19 @@ import { backendEthersSigningWallet, supabase, wsOps } from '../config';
 import { roundController } from '../controllers/roundController';
 import { applyPvp } from '../pvp';
 import { agentMessageInputSchema } from '../schemas/agentMessage';
-import { gmMessageAiChatOutputSchema, gmMessageInputSchema } from '../schemas/gmMessage';
+import {
+  gmMessageAgentOutputSchema,
+  gmMessageAiChatOutputSchema,
+  gmMessageInputSchema,
+} from '../schemas/gmMessage';
 import {
   observationMessageAiChatOutputSchema,
   observationMessageInputSchema,
 } from '../schemas/observationsMessage';
+import { WsMessageTypes } from '../schemas/wsServer';
 import { roomService } from '../services/roomService';
 import { roundService } from '../services/roundService';
 import { Tables } from '../types/database.types';
-import { WsMessageTypes } from '../types/ws';
 import { signMessage } from './auth';
 import { AllAgentChatMessageSchemaTypes } from './schemas';
 import { roundAndAgentsPreflight } from './validation';
@@ -182,10 +186,10 @@ async function notifyInactiveAgent(
         requestType: 'PARTICIPATION_REQUEST', // Changed from TRADING_DECISION
         attempt: 1,
       },
-    };
+    } as z.infer<typeof gmMessageAgentOutputSchema>['content'];
 
     // Sign message content with backend wallet
-    const signature = await signMessage(content);
+    const signature = await signMessage(content, backendEthersSigningWallet.privateKey);
 
     // Create properly typed GM message
     const gmMessage: z.infer<typeof gmMessageInputSchema> = {

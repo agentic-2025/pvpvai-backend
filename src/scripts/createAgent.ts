@@ -2,7 +2,7 @@ import axios from 'axios';
 import { z } from 'zod';
 import { backendEthersSigningWallet } from '../config';
 import { signedAgentCreationSchema } from '../routes/agentRoutes';
-import { WsMessageTypes } from '../types/ws';
+import { WsMessageTypes } from '../schemas/wsServer';
 import { sortObjectKeys } from '../utils/sortObjectKeys';
 
 async function createAgent() {

@@ -3,8 +3,8 @@ import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { contractClient, supabase } from '../config';
 import { signatureVerificationPlugin } from '../middleware/signatureVerification';
+import { WsMessageTypes } from '../schemas/wsServer';
 import { Database, Tables } from '../types/database.types';
-import { WsMessageTypes } from '../types/ws';
 import { getOrCreateUser } from '../utils/userManagement';
 
 // Schema for signed agent creation request

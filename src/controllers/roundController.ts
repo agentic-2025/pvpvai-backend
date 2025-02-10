@@ -12,31 +12,16 @@
  * - Message broadcasting via WS/REST
  */
 import { supabase } from '../config';
-import { PvPEffect } from '../schemas/pvp';
 import { roundService } from '../services/roundService';
 import { Database } from '../types/database.types';
 import { RoomOperationResult } from '../types/roomTypes';
 import { processInactiveAgents } from '../utils/messageHandler';
 import { wsOps } from '../ws/operations';
 
-// Define message types
-interface WsMessage {
-  type: string;
-  effect?: PvPEffect;
-}
 
-interface RestMessage {
-  success: boolean;
-  data?: {
-    type: string;
-    effect?: PvPEffect;
-  };
-  error?: string;
-}
 
 export class RoundController {
   // Track PvP effects in memory for fast access
-  private activePvPEffects: Map<number, PvPEffect[]> = new Map();
 
   private readonly INACTIVITY_THRESHOLD = 300000; // 5 minutes in milliseconds
   private readonly SYSTEM_GM_ID = 51; // System GM identifier

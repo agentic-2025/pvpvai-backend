@@ -11,7 +11,7 @@ import { supabase } from '../config';
 import { agentMessageInputSchema } from '../schemas/agentMessage';
 import { gmMessageInputSchema } from '../schemas/gmMessage';
 import { observationMessageInputSchema } from '../schemas/observationsMessage';
-import { WsMessageTypes } from '../types/ws';
+import { WsMessageTypes } from '../schemas/wsServer';
 import {
   processAgentMessage,
   processDecisionMessage,
