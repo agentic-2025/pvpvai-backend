@@ -78,9 +78,9 @@ const start = async () => {
 start();
 startContractEventListener();
 
-const job = new CronJob('*/25 * * * * *', checkAndCreateRounds);
+const job = new CronJob('*/29 * * * * *', checkAndCreateRounds);
 job.start();
-const job2 = new CronJob('*/20 * * * * *', checkAndCloseRounds);
+const job2 = new CronJob('*/29 * * * * *', checkAndCloseRounds);
 job2.start();
 // const job3 = new CronJob('*/15 * * * * *', syncAgentsWithActiveRounds);
 // job3.start();

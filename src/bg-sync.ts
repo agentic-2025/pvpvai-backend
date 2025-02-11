@@ -387,13 +387,13 @@ export async function closeRound(
   });
 
   // wait 30 seconds for the agents to respond
-  await new Promise((resolve) => setTimeout(resolve, 20000));
+  await new Promise((resolve) => setTimeout(resolve, 15000));
   // await new Promise(resolve => setTimeout(resolve, 1000));
 
   // select all the round_agents that are not kicked
   const { data: roundAgents2, error: roundAgentsError2 } = await supabase
     .from('round_agents')
-    .select('*, rounds(rooms(room_agents(*)))')
+    .select('*, rounds(rooms(room_agents(*, agents(*))))')
     .eq('round_id', round.id)
     .eq('kicked', false);
 
@@ -406,14 +406,17 @@ export async function closeRound(
   for (const roundAgent of roundAgents2) {
     try {
       console.log('roundAgent.outcome', roundAgent.outcome);
-      const outcome = JSON.parse(roundAgent.outcome as string);
+      let outcome = JSON.parse(roundAgent.outcome as string);
 
       // 1 = buy, 2 = hold, 3 = sell
       if (!outcome || Object.keys(outcome).length === 0) {
+        const decision = Math.floor(Math.random() * 3) + 1;
         await supabase
           .from('round_agents')
-          .update({ outcome: { decision: Math.floor(Math.random() * 3) + 1, fabricated: true } })
+          .update({ outcome: { decision, fabricated: true } })
           .eq('id', roundAgent.id);
+        outcome = { decision, fabricated: true };
+        receivedDecisions[roundAgent.id] = outcome.decision;
       }
 
       // 2 = processing
@@ -422,8 +425,9 @@ export async function closeRound(
         2
       );
       const receipt = await tx.wait();
-      console.log(receipt);
+      console.log('agent decision receipt', receipt);
       receivedDecisions[roundAgent.id] = outcome.decision;
+      console.log('receivedDecisions', receivedDecisions);
     } catch (error) {
       await supabase
         .from('round_agents')
@@ -432,12 +436,17 @@ export async function closeRound(
     }
   }
 
+  console.log('receivedDecisions2', receivedDecisions);
+
   const content2 = {
     message: `Round #${round.id} complete, you can withdraw your funds.
     
     Agent decisions:
     ${Object.entries(receivedDecisions)
-      .map(([agentId, decision]) => `Agent #${agentId}: ${decision}`)
+      .map(
+        ([agentId, decision]) =>
+          `Agent #${agentId}: ${decision === 1 ? 'BUY' : decision === 2 ? 'HOLD' : 'SELL'}`
+      )
       .join('\n')}
     `,
     roundId: round.id,
@@ -455,10 +464,11 @@ export async function closeRound(
   // send a message to agents
   await processGmMessage({
     messageType: WsMessageTypes.GM_MESSAGE,
-    signature: signature2,
+    signature: Date.now().toString(),
     sender: backendEthersSigningWallet.address,
     content: sortObjectKeys(content2),
-  });
+  } satisfies z.infer<typeof gmMessageAiChatOutputSchema>);
+  console.log('Sent the decision message to room participants:', content2);
 
   // set the round state to 3=closed
   const tx2 = await contract.setCurrentRoundState(3);

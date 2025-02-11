@@ -36,7 +36,7 @@ import {
 import { WsMessageTypes } from '../schemas/wsServer';
 import { roomService } from '../services/roomService';
 import { roundService } from '../services/roundService';
-import { Tables } from '../types/database.types';
+import { Database, Tables } from '../types/database.types';
 import { signMessage } from './auth';
 import { AllAgentChatMessageSchemaTypes } from './schemas';
 import { roundAndAgentsPreflight } from './validation';
@@ -521,6 +521,7 @@ export async function processGmMessage(
       };
     }
     if (round && !round.active && !ignoreErrors) {
+      console.error('Round is not active', round);
       return {
         error: 'Round is not active',
         statusCode: 400,
@@ -531,6 +532,7 @@ export async function processGmMessage(
     const { data: roundAgents, error: roundAgentsError } =
       await roundService.getRoundAgents(roundId);
     if ((roundAgentsError || !roundAgents) && !ignoreErrors) {
+      console.error('Error getting round agents: ' + roundAgentsError);
       return {
         error: 'Error getting round agents: ' + roundAgentsError,
         statusCode: 500,
@@ -546,6 +548,7 @@ export async function processGmMessage(
         targets.map((t) => t)
       );
     if (agentsError) {
+      console.error('Error getting agents: ' + agentsError);
       return {
         error: 'Error getting agents: ' + agentsError,
         statusCode: 500,
@@ -557,15 +560,17 @@ export async function processGmMessage(
       .from('agents')
       .select('*')
       .eq('id', gmId)
-      .eq('type', 'game-master')
+      // .eq('type', 'game-master')
       .single();
     if (gameMasterError) {
       if (gameMasterError.code === 'PGRST106') {
+        console.error('Game master not found');
         return {
           error: 'Game master not found',
           statusCode: 400,
         };
       }
+      console.error('Error getting Game Master: ' + JSON.stringify(gameMasterError, null, 2));
       return {
         error: 'Error getting Game Master: ' + gameMasterError,
         statusCode: 500,
@@ -597,6 +602,10 @@ export async function processGmMessage(
     // GM cannot message targets that have never been in the room
     const allAgentsInRoom = await roomService.getRoomAgents(roomId);
     if (allAgentsInRoom.error) {
+      console.error(
+        'Could not check which agents have ever been associated with this room: ' +
+          allAgentsInRoom.error
+      );
       return {
         error:
           'Could not check which agents have ever been associated with this room: ' +
@@ -605,28 +614,34 @@ export async function processGmMessage(
       };
     }
 
-    const agentsNotInRoom = targets.filter(
-      (target) => !allAgentsInRoom.data?.some((agent) => agent.id === target)
-    );
-    if (agentsNotInRoom.length > 0) {
-      return {
-        error: `Some targets have never been in this room, cannot send message. Targets not found in room: ${agentsNotInRoom.join(', ')}`,
-        statusCode: 400,
-      };
-    }
+    // const agentsNotInRoom = targets.filter(
+    //   (target) => !allAgentsInRoom.data?.some((agent) => agent.id === target)
+    // );
+    // if (agentsNotInRoom.length > 0) {
+    //   console.error(
+    //     `Some targets have never been in this room, cannot send message. Targets not found in room: ${agentsNotInRoom.join(', ')}`
+    //   );
+    //   return {
+    //     error: `Some targets have never been in this room, cannot send message. Targets not found in room: ${agentsNotInRoom.join(', ')}`,
+    //     statusCode: 400,
+    //   };
+    // }
 
     // (Ignorable) Check if any of the targets of the message are not in the round
     // GM can bypass round membership errors if they have to send a message to clean up something,
     // TODO preflight cleans kicked, but because this is ignorable, you can bypass, not critical to fix.
-    const agentsNotInRound = targets.filter(
-      (target) => !roundAgents?.some((agent) => agent.id === target)
-    );
-    if (agentsNotInRound.length > 0 && !ignoreErrors) {
-      return {
-        error: `Some targets are not in the round, cannot send message. Targets not found in round: ${agentsNotInRound.join(', ')}`,
-        statusCode: 400,
-      };
-    }
+    // const agentsNotInRound = targets.filter(
+    //   (target) => !roundAgents?.some((agent) => agent.id === target)
+    // );
+    // if (agentsNotInRound.length > 0 && !ignoreErrors) {
+    //   console.error(
+    //     `Some targets are not in the round, cannot send message. Targets not found in round: ${agentsNotInRound.join(', ')}`
+    //   );
+    //   return {
+    //     error: `Some targets are not in the round, cannot send message. Targets not found in round: ${agentsNotInRound.join(', ')}`,
+    //     statusCode: 400,
+    //   };
+    // }
 
     // Send processed message to all agents in the round
     for (const agent of agents) {
@@ -646,7 +661,7 @@ export async function processGmMessage(
         pvp_status_effects: {},
         message_type: WsMessageTypes.GM_MESSAGE,
         message: message satisfies z.infer<typeof gmMessageAiChatOutputSchema>,
-      },
+      } as Database['public']['Tables']['round_agent_messages']['Insert'],
     });
 
     return {
