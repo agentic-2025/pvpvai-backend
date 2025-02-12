@@ -16,8 +16,11 @@ import { WsMessageTypes } from './schemas/wsServer';
 import { roomAbi } from './types/contract.types';
 import { Database } from './types/database.types';
 
-const HARDCODED_ROOM = 16;
-const HARDCODED_ROOM_ADDRESS = '0x1698f764C1d34315698D9D96Ded939e24587a3fB';
+const HARDCODED_ROOM = 17;
+const HARDCODED_ROOM_ADDRESS = '0x0671e8dF82B1E4049b23a06B1fE6376A7F22116A';
+// 0x4ffE2DF7B11ea3f28c6a7C90b39F52427c9D550d
+// 0x830598617569AfD7Ad16343f5D4a226578b16A3d
+// 0x1D5EbEABEE35dbBA6Fd2847401F979b3f6249a93
 
 // Base Sepolia RPC URL (Use Alchemy, Infura, or Public RPC)
 

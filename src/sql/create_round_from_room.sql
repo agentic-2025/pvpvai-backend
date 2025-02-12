@@ -1,5 +1,5 @@
 drop function create_round_from_room
-create or replace function create_round_from_room(room_id_param int)
+create or replace function create_round_from_room(room_id_param int, underlying_contract_round int)
 returns table (
   id int,
   room_id int,
@@ -28,12 +28,14 @@ begin
         room_id,
         active,
         status,
+        underlying_contract_round,
         round_config
     )
     values (
         room_id_param,
         true,
         'STARTING',
+        underlying_contract_round,
         room_record.room_config
     )
     returning rounds.id into new_round_id;

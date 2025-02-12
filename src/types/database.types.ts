@@ -80,7 +80,7 @@ export type Database = {
           },
         ]
       }
-      drop_me_customers: {
+      DROP_ME_DEBUGGING_customers: {
         Row: {
           id: number
           metadata: Json | null
@@ -442,40 +442,37 @@ export type Database = {
         Row: {
           active: boolean
           created_at: string
-          game_master_action_log: Json | null
           game_master_id: number | null
           id: number
-          pvp_action_log: Json | null
           pvp_status_effects: Json | null
           room_id: number
           round_config: Json | null
           status: Database["public"]["Enums"]["round_status"]
+          underlying_contract_round: number | null
           updated_at: string
         }
         Insert: {
           active: boolean
           created_at?: string
-          game_master_action_log?: Json | null
           game_master_id?: number | null
           id?: number
-          pvp_action_log?: Json | null
           pvp_status_effects?: Json | null
           room_id: number
           round_config?: Json | null
           status?: Database["public"]["Enums"]["round_status"]
+          underlying_contract_round?: number | null
           updated_at?: string
         }
         Update: {
           active?: boolean
           created_at?: string
-          game_master_action_log?: Json | null
           game_master_id?: number | null
           id?: number
-          pvp_action_log?: Json | null
           pvp_status_effects?: Json | null
           room_id?: number
           round_config?: Json | null
           status?: Database["public"]["Enums"]["round_status"]
+          underlying_contract_round?: number | null
           updated_at?: string
         }
         Relationships: [
@@ -523,6 +520,7 @@ export type Database = {
       create_round_from_room: {
         Args: {
           room_id_param: number
+          underlying_contract_round: number
         }
         Returns: {
           id: number

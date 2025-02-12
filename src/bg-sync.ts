@@ -127,7 +127,6 @@ export async function checkAndCreateRounds() {
     const { data: roomsNeedingRounds, error } = await supabase.rpc(
       'get_active_rooms_needing_rounds'
     );
-
     if (error) {
       console.error('Error fetching rooms:', error);
       return;
@@ -135,6 +134,9 @@ export async function checkAndCreateRounds() {
 
     // Process each room that needs a new round
     for (const room of roomsNeedingRounds || []) {
+      if (room.id !== 17) {
+        continue;
+      }
       console.log('creating new round for room', room.id);
       await createNewRound(room);
       break;
@@ -148,9 +150,22 @@ export async function createNewRound(
   room: Database['public']['Functions']['get_active_rooms_needing_rounds']['Returns'][0]
 ) {
   try {
+    const contract = getRoomContract(room.contract_address);
+    const tx = await contract.startRound();
+    const receipt = await tx.wait();
+
+    if (receipt.status === 0) {
+      console.error('Failed to start round for room', room.id, ':', receipt);
+      throw new Error('Transaction failed');
+    }
+
+    const currentRound = await contract.currentRoundId();
+    console.log('currentRound', currentRound);
+
     const { data: newRound, error: insertError } = await supabase
       .rpc('create_round_from_room', {
         room_id_param: room.id,
+        underlying_contract_round: Number(currentRound),
       })
       .single();
 
@@ -161,10 +176,6 @@ export async function createNewRound(
 
     console.log('new round created', newRound);
     console.log(`calling contract ${room.contract_address} startRound`);
-
-    const contract = getRoomContract(room.contract_address);
-    const tx = await contract.startRound();
-    const receipt = await tx.wait();
 
     console.log('logged receipt for startRound', receipt);
     // update the round status to OPEN
@@ -184,23 +195,23 @@ export async function createNewRound(
     }
     console.log('roundAgentsXXX', roundData.round_agents);
 
-    // Tell agents to get the latest round
-    for (const roundAgent of roundData.round_agents) {
-      console.log('reinitializing agent', roundAgent.agents.id, 'at', roundAgent.agents.endpoint);
-      axios
-        .post(`${new URL('reinit', roundAgent.agents.endpoint).toString()}`, {
-          roomId: newRound.room_id,
-        })
-        .catch((error) => {
-          console.error('Error reinitializing agent:', error.response?.data);
-        });
-    }
+    // // Tell agents to get the latest round
+    // for (const roundAgent of roundData.round_agents) {
+    //   console.log('reinitializing agent', roundAgent.agents.id, 'at', roundAgent.agents.endpoint);
+    //   axios
+    //     .post(`${new URL('reinit', roundAgent.agents.endpoint).toString()}`, {
+    //       roomId: newRound.room_id,
+    //     })
+    //     .catch((error) => {
+    //       console.error('Error reinitializing agent:', error.response?.data);
+    //     });
+    // }
 
     await sendGmMessage({
       roomId: newRound.room_id,
       roundId: newRound.id,
       targets: [],
-      message: 'All agents have been reinitialized for the new round',
+      message: 'Round #' + newRound.id + ' has started, you may place your bets now',
     });
     const { error: updateError3 } = await supabase
       .from('rounds')
@@ -232,6 +243,9 @@ export async function checkAndCloseRounds() {
 
     // Process each room that needs a new round
     for (const round of roundsToClose || []) {
+      if (round.room_id !== 17) {
+        continue;
+      }
       // console.log(room.id);
       await closeRound(round);
     }

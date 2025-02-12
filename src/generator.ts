@@ -293,7 +293,7 @@ function stringToHex(str: string): string {
 async function invokePvpAction(wallet: ethers.Wallet, targetAddress: string) {
   const provider = new ethers.JsonRpcProvider(process.env.BASE_SEPOLIA_RPC_URL);
   const contract = new ethers.Contract(
-    '0x9Bd805b04809AeE006Eb05572AAFB2807A03eCDb',
+    '0x3E59E93Cb8daa917967f890aC3558e999D7Ad769',
     roomAbi,
     wallet.connect(provider)
   );
