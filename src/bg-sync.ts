@@ -12,6 +12,7 @@ import { processGmMessage } from './utils/messageHandler';
 import { wsServer } from './ws/server';
 
 const HARDCODED_GM_ID = 57;
+const HARDCODED_ROOM_ID = 17;
 
 export async function checkAgentsForNudge() {
   const { data: roundAgents, error } = await supabase
@@ -81,7 +82,7 @@ export async function checkAndCreateRounds() {
 
     // Process each room that needs a new round
     for (const room of roomsNeedingRounds || []) {
-      if (room.id !== 17) {
+      if (room.id !== HARDCODED_ROOM_ID) {
         continue;
       }
       console.log('creating new round for room', room.id);
@@ -190,7 +191,7 @@ export async function checkAndCloseRounds() {
 
     // Process each room that needs a new round
     for (const round of roundsToClose || []) {
-      if (round.room_id !== 17) {
+      if (round.room_id !== HARDCODED_ROOM_ID) {
         continue;
       }
       // console.log(room.id);
@@ -401,7 +402,7 @@ export async function closeRound(
 
   const content2 = {
     message: `Round #${round.id} complete, you can withdraw your funds.
-    
+
     Agent decisions:
     ${Object.entries(receivedDecisions)
       .map(
