@@ -18,6 +18,13 @@ import { Database } from './types/database.types';
 
 const HARDCODED_ROOM = 17;
 
+
+// Add a flag to track if we've already processed an event
+const processedEvents = new Set<string>();
+// Add this event to our processed set
+
+
+
 // Base Sepolia RPC URL (Use Alchemy, Infura, or Public RPC)
 
 // Error in createNewRound: Error: network does not support ENS (operation="getEnsAddress",
@@ -216,7 +223,18 @@ export async function startContractEventListener() {
       });
     });
 
+
     contract.on(pvpActionInvokedFilter, async (eventPayload) => {
+      console.log('Transaction hash', eventPayload.log.transactionHash);
+      if (processedEvents.has(eventPayload.log.transactionHash)) {
+        console.log('Skipping duplicate event:', eventPayload.log.transactionHash);
+        return;
+      }
+
+      processedEvents.add(eventPayload.log.transactionHash);
+
+      // Clear old events periodically to prevent memory leaks
+      // setTimeout(() => processedEvents.delete(eventPayload.log.transactionHash), 60000); // Clear after 1 minute
       const [contractRoundId, verbHash, targetAddress, endTime, parameters] = eventPayload.args;
       console.log('\n=== PvpActionInvoked Event Details ===');
 
