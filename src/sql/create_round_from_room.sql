@@ -1,4 +1,3 @@
-drop function create_round_from_room
 create or replace function create_round_from_room(room_id_param int, underlying_contract_round int)
 returns table (
   id int,
@@ -6,8 +5,8 @@ returns table (
   active boolean,
   status round_status,
   round_config jsonb,
-  created_at timestamp,
-  updated_at timestamp
+  created_at timestamptz,
+  updated_at timestamptz
 ) as $$
 declare
     new_round_id int;
