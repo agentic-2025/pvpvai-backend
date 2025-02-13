@@ -2,7 +2,9 @@
 // Clones
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-export const clonesAbi = [{ type: 'error', inputs: [], name: 'CloneArgumentsTooLong' }] as const;
+export const clonesAbi = [
+  { type: 'error', inputs: [], name: 'CloneArgumentsTooLong' },
+] as const
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Core
@@ -471,7 +473,9 @@ export const coreAbi = [
   },
   {
     type: 'error',
-    inputs: [{ name: 'queriedWallet', internalType: 'address', type: 'address' }],
+    inputs: [
+      { name: 'queriedWallet', internalType: 'address', type: 'address' },
+    ],
     name: 'Core__AgentWalletNotFound',
   },
   { type: 'error', inputs: [], name: 'Core__CreateRoomInvalidToken' },
@@ -507,13 +511,15 @@ export const coreAbi = [
     name: 'OwnableUnauthorizedAccount',
   },
   { type: 'error', inputs: [], name: 'ReentrancyGuardReentrantCall' },
-] as const;
+] as const
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Create2
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-export const create2Abi = [{ type: 'error', inputs: [], name: 'Create2EmptyBytecode' }] as const;
+export const create2Abi = [
+  { type: 'error', inputs: [], name: 'Create2EmptyBytecode' },
+] as const
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Diamond
@@ -606,7 +612,7 @@ export const diamondAbi = [
     inputs: [{ name: 'account', internalType: 'address', type: 'address' }],
     name: 'OwnableUnauthorizedAccount',
   },
-] as const;
+] as const
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // ERC20
@@ -767,7 +773,7 @@ export const erc20Abi = [
     inputs: [{ name: 'spender', internalType: 'address', type: 'address' }],
     name: 'ERC20InvalidSpender',
   },
-] as const;
+] as const
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Errors
@@ -789,7 +795,7 @@ export const errorsAbi = [
     inputs: [{ name: '', internalType: 'address', type: 'address' }],
     name: 'MissingPrecompile',
   },
-] as const;
+] as const
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // IERC1155Errors
@@ -842,7 +848,7 @@ export const ierc1155ErrorsAbi = [
     ],
     name: 'ERC1155MissingApprovalForAll',
   },
-] as const;
+] as const
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // IERC20Errors
@@ -887,7 +893,7 @@ export const ierc20ErrorsAbi = [
     inputs: [{ name: 'spender', internalType: 'address', type: 'address' }],
     name: 'ERC20InvalidSpender',
   },
-] as const;
+] as const
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // IERC20Metadata
@@ -1010,7 +1016,7 @@ export const ierc20MetadataAbi = [
     ],
     name: 'Transfer',
   },
-] as const;
+] as const
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // IERC721Errors
@@ -1064,7 +1070,7 @@ export const ierc721ErrorsAbi = [
     inputs: [{ name: 'tokenId', internalType: 'uint256', type: 'uint256' }],
     name: 'ERC721NonexistentToken',
   },
-] as const;
+] as const
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // IMulticall3
@@ -1195,7 +1201,9 @@ export const iMulticall3Abi = [
     type: 'function',
     inputs: [],
     name: 'getBlockNumber',
-    outputs: [{ name: 'blockNumber', internalType: 'uint256', type: 'uint256' }],
+    outputs: [
+      { name: 'blockNumber', internalType: 'uint256', type: 'uint256' },
+    ],
     stateMutability: 'view',
   },
   {
@@ -1305,7 +1313,7 @@ export const iMulticall3Abi = [
     ],
     stateMutability: 'payable',
   },
-] as const;
+] as const
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // IPvP
@@ -1435,7 +1443,7 @@ export const iPvPAbi = [
     outputs: [],
     stateMutability: 'nonpayable',
   },
-] as const;
+] as const
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // IRoom
@@ -1461,7 +1469,7 @@ export const iRoomAbi = [
     outputs: [],
     stateMutability: 'nonpayable',
   },
-] as const;
+] as const
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // MockUSDC
@@ -1683,7 +1691,7 @@ export const mockUsdcAbi = [
     inputs: [{ name: 'account', internalType: 'address', type: 'address' }],
     name: 'OwnableUnauthorizedAccount',
   },
-] as const;
+] as const
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Ownable
@@ -1740,7 +1748,7 @@ export const ownableAbi = [
     inputs: [{ name: 'account', internalType: 'address', type: 'address' }],
     name: 'OwnableUnauthorizedAccount',
   },
-] as const;
+] as const
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // PvPFacet
@@ -1909,7 +1917,9 @@ export const pvPFacetAbi = [
   {
     type: 'event',
     anonymous: false,
-    inputs: [{ name: 'verb', internalType: 'string', type: 'string', indexed: true }],
+    inputs: [
+      { name: 'verb', internalType: 'string', type: 'string', indexed: true },
+    ],
     name: 'PvpActionRemoved',
   },
   {
@@ -1947,7 +1957,7 @@ export const pvPFacetAbi = [
     ],
     name: 'PvPFacet_StatusEffectAlreadyActive',
   },
-] as const;
+] as const
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // ReentrancyGuard
@@ -1955,7 +1965,7 @@ export const pvPFacetAbi = [
 
 export const reentrancyGuardAbi = [
   { type: 'error', inputs: [], name: 'ReentrancyGuardReentrantCall' },
-] as const;
+] as const
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Room
@@ -2001,7 +2011,9 @@ export const roomAbi = [
   },
   {
     type: 'function',
-    inputs: [{ name: 'newState', internalType: 'enum Room.RoundState', type: 'uint8' }],
+    inputs: [
+      { name: 'newState', internalType: 'enum Room.RoundState', type: 'uint8' },
+    ],
     name: 'changeRoundState',
     outputs: [],
     stateMutability: 'nonpayable',
@@ -2143,7 +2155,9 @@ export const roomAbi = [
     type: 'function',
     inputs: [{ name: 'roundId', internalType: 'uint256', type: 'uint256' }],
     name: 'getRoundState',
-    outputs: [{ name: '', internalType: 'enum Room.RoundState', type: 'uint8' }],
+    outputs: [
+      { name: '', internalType: 'enum Room.RoundState', type: 'uint8' },
+    ],
     stateMutability: 'view',
   },
   {
@@ -2292,7 +2306,9 @@ export const roomAbi = [
   },
   {
     type: 'function',
-    inputs: [{ name: 'newState', internalType: 'enum Room.RoundState', type: 'uint8' }],
+    inputs: [
+      { name: 'newState', internalType: 'enum Room.RoundState', type: 'uint8' },
+    ],
     name: 'setCurrentRoundState',
     outputs: [],
     stateMutability: 'nonpayable',
@@ -2533,6 +2549,12 @@ export const roomAbi = [
     type: 'event',
     anonymous: false,
     inputs: [
+      {
+        name: 'roundId',
+        internalType: 'uint256',
+        type: 'uint256',
+        indexed: true,
+      },
       { name: 'verb', internalType: 'string', type: 'string', indexed: true },
       {
         name: 'target',
@@ -2558,7 +2580,9 @@ export const roomAbi = [
   {
     type: 'event',
     anonymous: false,
-    inputs: [{ name: 'verb', internalType: 'string', type: 'string', indexed: true }],
+    inputs: [
+      { name: 'verb', internalType: 'string', type: 'string', indexed: true },
+    ],
     name: 'PvpActionRemoved',
   },
   {
@@ -2693,7 +2717,9 @@ export const roomAbi = [
   { type: 'error', inputs: [], name: 'Room_NotGameMaster' },
   {
     type: 'error',
-    inputs: [{ name: 'currentRoundId', internalType: 'uint256', type: 'uint256' }],
+    inputs: [
+      { name: 'currentRoundId', internalType: 'uint256', type: 'uint256' },
+    ],
     name: 'Room_RoundNotClosed',
   },
   { type: 'error', inputs: [], name: 'Room_SenderAlreadyClaimedWinnings' },
@@ -2709,4 +2735,4 @@ export const roomAbi = [
   },
   { type: 'error', inputs: [], name: 'Room_TransferFailed' },
   { type: 'error', inputs: [], name: 'Room__AlreadyInitialized' },
-] as const;
+] as const
