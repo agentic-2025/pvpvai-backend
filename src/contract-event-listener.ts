@@ -73,14 +73,14 @@ function decodePvpInvokeParameters(verb: string, parametersHex: string): any {
   }
 }
 
-function getPvpActionFromVerb(verb: string, decodedParameters: any): PvpAllPvpActionsType {
+function getPvpActionFromVerb(verb: string, targetAddress: string, decodedParameters: any): PvpAllPvpActionsType {
   switch (verb.toUpperCase()) {
     case PvpActions.ATTACK:
       return {
         actionType: PvpActions.ATTACK,
         actionCategory: PvpActionCategories.DIRECT_ACTION,
         parameters: {
-          target: decodedParameters.target,
+          target: targetAddress,
           message: decodedParameters.message,
         },
       };
@@ -89,7 +89,7 @@ function getPvpActionFromVerb(verb: string, decodedParameters: any): PvpAllPvpAc
         actionType: PvpActions.SILENCE,
         actionCategory: PvpActionCategories.STATUS_EFFECT,
         parameters: {
-          target: decodedParameters.target,
+          target: targetAddress,
           duration: decodedParameters.duration,
         },
       };
@@ -98,7 +98,7 @@ function getPvpActionFromVerb(verb: string, decodedParameters: any): PvpAllPvpAc
         actionType: PvpActions.DEAFEN,
         actionCategory: PvpActionCategories.STATUS_EFFECT,
         parameters: {
-          target: decodedParameters.target,
+          target: targetAddress,
           duration: decodedParameters.duration,
         },
       };
@@ -107,7 +107,7 @@ function getPvpActionFromVerb(verb: string, decodedParameters: any): PvpAllPvpAc
         actionType: PvpActions.POISON,
         actionCategory: PvpActionCategories.STATUS_EFFECT,
         parameters: {
-          target: decodedParameters.target,
+          target: targetAddress,
           duration: decodedParameters.duration,
           find: decodedParameters.find,
           replace: decodedParameters.replace,
@@ -205,7 +205,7 @@ export async function startContractEventListener() {
     });
 
     contract.on(pvpActionInvokedFilter, async (eventPayload) => {
-      const [verbHash, address, endTime, parameters] = eventPayload.args;
+      const [verbHash, targetAddress, endTime, parameters] = eventPayload.args;
       console.log('\n=== PvpActionInvoked Event Details ===');
 
       // Decode the verb
@@ -250,12 +250,12 @@ export async function startContractEventListener() {
       }
 
       // Create a structured object matching your schema types
-      const pvpAction = getPvpActionFromVerb(verb, decodedParameters);
+      const pvpAction = getPvpActionFromVerb(verb, targetAddress, decodedParameters);
 
       // Log the decoded data
       console.log('\nDecoded Data:');
       console.log('- Verb:', verb);
-      console.log('- Address:', address);
+      console.log('- TargetAddress:', targetAddress);
       console.log('- End Time:', endTime);
       console.log('- Decoded Parameters:', decodedParameters);
       console.log('\nStructured PVP Action:', pvpAction);
@@ -263,11 +263,13 @@ export async function startContractEventListener() {
       const pvpActionMessage = {
         messageType: WsMessageTypes.PVP_ACTION_ENACTED,
         signature: 'signature',
-        sender: address,
+        sender: targetAddress,
         content: {
           roundId: round.id,
-          instigator: address,
-          timestamp: endTime,
+          instigatorAddress: targetAddress,
+          txHash: eventPayload.log.transactionHash,
+          // toString() so postgres can handle it when calling JSON.stringify()
+          timestamp: endTime.toString(),
           roomId: room.id,
           action: pvpAction,
         },
