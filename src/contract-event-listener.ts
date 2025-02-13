@@ -17,10 +17,6 @@ import { roomAbi } from './types/contract.types';
 import { Database } from './types/database.types';
 
 const HARDCODED_ROOM = 17;
-const HARDCODED_ROOM_ADDRESS = '0x0671e8dF82B1E4049b23a06B1fE6376A7F22116A';
-// 0x4ffE2DF7B11ea3f28c6a7C90b39F52427c9D550d
-// 0x830598617569AfD7Ad16343f5D4a226578b16A3d
-// 0x1D5EbEABEE35dbBA6Fd2847401F979b3f6249a93
 
 // Base Sepolia RPC URL (Use Alchemy, Infura, or Public RPC)
 
@@ -146,10 +142,26 @@ export async function startContractEventListener() {
     // });
 
     // Verify provider connection
+    const { data: room, error: roomError } = await supabase
+      .from('rooms')
+      .select('*')
+      .eq('id', HARDCODED_ROOM)
+      .single();
+
+    if (roomError) {
+      console.error('Error fetching room:', roomError);
+      return;
+    }
+
     const network = await provider.getNetwork();
     console.log('Connected to network:', network.name, 'chainId:', network.chainId);
 
-    const contractAddress = HARDCODED_ROOM_ADDRESS;
+    if (!room.contract_address) {
+      throw new Error(
+        'No contract address found for room #' + HARDCODED_ROOM + " can't listen to contract"
+      );
+    }
+    const contractAddress = room.contract_address;
     const contract = new ethers.Contract(contractAddress, roomAbi, provider);
 
     // Verify contract connection
@@ -208,6 +220,10 @@ export async function startContractEventListener() {
       const [verbHash, targetAddress, endTime, parameters] = eventPayload.args;
       console.log('\n=== PvpActionInvoked Event Details ===');
 
+      // Get transaction details to find the sender
+      const transaction = await eventPayload.getTransaction();
+      const instigatorAddress = transaction.from;
+
       // Decode the verb
       const verb = verbHashToString[verbHash.hash];
       if (!verb) {
@@ -215,6 +231,7 @@ export async function startContractEventListener() {
         return;
       }
 
+      console.log(eventPayload);
       // Decode the parameters
       const decodedParameters = decodePvpInvokeParameters(verb, parameters);
       if (!decodedParameters) {
@@ -266,7 +283,7 @@ export async function startContractEventListener() {
         sender: targetAddress,
         content: {
           roundId: round.id,
-          instigatorAddress: targetAddress,
+          instigatorAddress: instigatorAddress,
           txHash: eventPayload.log.transactionHash,
           // toString() so postgres can handle it when calling JSON.stringify()
           timestamp: endTime.toString(),
