@@ -13,19 +13,18 @@
 import { ethers } from 'ethers';
 import { z } from 'zod';
 import { ethersProvider } from './config';
-import { agentMessageInputSchema } from './schemas/agentMessage';
+import { agentMessageAiChatOutputSchema, agentMessageInputSchema } from './schemas/agentMessage';
 import {
+  AllPvpParametersType,
   attackActionSchema,
   deafenStatusSchema,
   poisonStatusSchema,
-  PvpActionCategories,
   PvpActions,
   PvpAllPvpActionsType,
   silenceStatusSchema,
 } from './schemas/pvp';
 import { WsMessageTypes } from './schemas/wsServer';
 import { roomAbi } from './types/contract.types';
-import { Json } from './types/database.types';
 import { AllAgentChatMessageSchemaTypes } from './utils/schemas';
 /**
  * Defines the structure of PvP status data returned from the smart contract
@@ -33,7 +32,7 @@ import { AllAgentChatMessageSchemaTypes } from './utils/schemas';
 interface PvpStatus {
   endTime: number; // Unix timestamp when the effect expires
   instigator: string; // Address of who applied the effect
-  parameters: string; // Hex-encoded JSON string containing effect parameters
+  parameters: AllPvpParametersType; // Hex-encoded JSON string containing effect parameters
   verb: string; // The type of effect (e.g., 'silence', 'deafen', 'poison')
 }
 
@@ -42,11 +41,12 @@ interface PvpStatus {
  * Aligns with database schema for round_agent_messages
  */
 export interface PvPResult {
+  currentBlockTimestamp: number;
   originalMessage: AllAgentChatMessageSchemaTypes;
   // originalTargets: number[];
   targetMessages: Record<number, z.infer<typeof agentMessageInputSchema>>;
   appliedEffects: PvpAllPvpActionsType[];
-  pvpStatusEffects: Json;
+  pvpStatusEffects: z.infer<typeof agentMessageAiChatOutputSchema>['content']['pvpStatusEffects'];
 }
 
 /**
@@ -66,20 +66,6 @@ type AgentMessage = Extract<
     };
   }
 >;
-
-/**
- * Type guard to ensure we're working with a valid agent message
- */
-function isAgentMessage(message: AllAgentChatMessageSchemaTypes): message is AgentMessage {
-  return (
-    message.messageType === WsMessageTypes.AGENT_MESSAGE &&
-    'content' in message &&
-    typeof message.content === 'object' &&
-    message.content !== null &&
-    'text' in message.content &&
-    typeof message.content.text === 'string'
-  );
-}
 
 /**
  * Decodes hex-encoded parameters from contract
@@ -122,15 +108,24 @@ async function getPvpStatuses(contractAddress: string, agentAddress: string): Pr
     const provider = new ethers.JsonRpcProvider(process.env.BASE_SEPOLIA_RPC_URL);
     const contract = new ethers.Contract(contractAddress, roomAbi, provider);
     const statuses = await contract.getPvpStatuses(agentAddress);
+    console.log('statuses', statuses);
 
-    return statuses;
+    const parsedStatuses = statuses.map((status: any) => {
+      //TODO can safe parse here
+      const verb = status.verb;
+      const endTime = Number(status.endTime);
+      const parameters = decodeParameters(status.parameters, verb);
+      const instigator = status.instigator;
+      console.log('parameters', parameters);
+      return { verb, endTime, parameters, instigator };
+    });
+
+    return parsedStatuses;
   } catch (error) {
     console.error('Error fetching PvP statuses:', error);
     return [];
   }
 }
-
-
 
 // applySilenceEffect
 // If sender is silent, empty targetMessages
@@ -143,8 +138,12 @@ function applySilenceEffect({
   targetMessages: Record<number, z.infer<typeof agentMessageInputSchema>>;
   currentBlockTimestamp: number;
 }): Record<number, z.infer<typeof agentMessageInputSchema>> {
+  console.log('applying silence effect');
+  // console.log('senderStatuses', senderStatuses);
+  // console.log('targetMessages', targetMessages);
+  // console.log('currentBlockTimestamp', currentBlockTimestamp);
   const silenced = senderStatuses.find((status) => {
-    status.verb.toLowerCase() === 'silence' && status.endTime > currentBlockTimestamp;
+    return status.verb.toLowerCase() === 'silence' && status.endTime > currentBlockTimestamp;
   });
 
   if (silenced) {
@@ -168,9 +167,10 @@ function applyDeafenEffect({
 }): Record<number, z.infer<typeof agentMessageInputSchema>> {
   for (const targetId of Object.keys(targetMessages)) {
     const targetStatus = targetStatuses[targetId];
-
+    console.log('targetStatus', targetStatus);
+    console.log('currentBlockTimestamp', currentBlockTimestamp);
     const deaf = targetStatus.find((status) => {
-      status.verb.toLowerCase() === 'deafen' && status.endTime > currentBlockTimestamp;
+      return status.verb.toLowerCase() === 'deafen' && status.endTime > currentBlockTimestamp;
     });
     if (deaf) {
       console.log(`target ${targetId} is deaf, remove from targetMessages`);
@@ -205,7 +205,12 @@ function applyPoisonEffect({
 
   if (senderPoisoned) {
     console.log('sender is poisoned, find and replace on all target messages');
-    const params = decodeParameters(senderPoisoned.parameters, senderPoisoned.verb);
+    const parsedParams = poisonStatusSchema.shape.parameters.safeParse(senderPoisoned.parameters);
+    if (!parsedParams.success) {
+      console.error('Invalid poison parameters:', parsedParams.error);
+      return targetMessages;
+    }
+    const params = parsedParams.data;
     if (params?.find && params?.replace) {
       // Apply poison to all target messages
       Object.keys(targetMessages).forEach((targetId) => {
@@ -228,19 +233,6 @@ function applyPoisonEffect({
           console.log('modified message', message.content.text);
         }
       });
-
-      // Record the effect
-      const poisonEffect = poisonStatusSchema.parse({
-        actionType: PvpActions.POISON,
-        actionCategory: PvpActionCategories.STATUS_EFFECT,
-        parameters: {
-          target: senderAddress,
-          duration: senderPoisoned.endTime - currentBlockTimestamp,
-          find: params.find,
-          replace: params.replace,
-          case_sensitive: !!params.case_sensitive,
-        },
-      });
     }
   }
 
@@ -254,10 +246,19 @@ function applyPoisonEffect({
     );
 
     if (targetPoisoned) {
-      const params = decodeParameters(targetPoisoned.parameters, targetPoisoned.verb);
+      console.log(`target ${targetId} is poisoned, find and replace on target message`);
+      console.log('targetPoisoned', targetPoisoned.parameters);
+      const parsedParams = poisonStatusSchema.shape.parameters.safeParse(targetPoisoned.parameters);
+      if (!parsedParams.success) {
+        console.error('Invalid poison parameters:', parsedParams.error);
+        return targetMessages;
+      }
+      const params = parsedParams.data;
+
       if (params?.find && params?.replace) {
         const prePoisonMessage = message.content.text;
         // Apply poison to this target's message
+        console.log('pre poison message', prePoisonMessage);
         targetMessages[targetId] = {
           ...message,
           content: {
@@ -268,6 +269,7 @@ function applyPoisonEffect({
             ),
           },
         };
+        console.log('post poison message', message.content.text);
         if (message.content.text !== prePoisonMessage) {
           console.log(`${targetId} message was modified by target poison`);
           console.log('original message', prePoisonMessage);
@@ -300,7 +302,8 @@ export async function applyPvp(
       // originalTargets: targetAgentIds,
       targetMessages: {},
       appliedEffects: [],
-      pvpStatusEffects: {} as Json,
+      pvpStatusEffects: {},
+      currentBlockTimestamp: Number(0),
     };
 
     // Initialize targetMessages as a copy of source. If no PvP effects are applied, we will send the original message to all targets
@@ -316,16 +319,17 @@ export async function applyPvp(
     if (!currentBlock) {
       throw new Error('Failed to get current block, cannot apply PvP');
     }
-    const currentBlockTimestamp = currentBlock.timestamp;
+    const currentBlockTimestamp = Number(currentBlock.timestamp);
+    result.currentBlockTimestamp = currentBlockTimestamp;
+
     console.log('currentBlockTimestamp being used for PvP checks', currentBlockTimestamp);
     const currentStatusesForAgentsById: Record<number, PvpStatus[]> = {};
     for (const targetId of [...targetAgentIds, senderAgentId]) {
       const targetAddress = agentAddresses.get(targetId);
       if (!targetAddress) continue;
-      const statuses = await getPvpStatuses(contractAddress, targetAddress);
-      currentStatusesForAgentsById[targetId] = statuses;
+      currentStatusesForAgentsById[targetId] = await getPvpStatuses(contractAddress, targetAddress);
     }
-
+    result.pvpStatusEffects = currentStatusesForAgentsById;
     console.log('currentStatusesForAgentsById', currentStatusesForAgentsById);
 
     result.targetMessages = applySilenceEffect({
@@ -356,7 +360,8 @@ export async function applyPvp(
       originalMessage: originalMessage,
       targetMessages: Object.fromEntries(targetAgentIds.map((id) => [id, originalMessage])),
       appliedEffects: [],
-      pvpStatusEffects: {} as Json,
+      pvpStatusEffects: {},
+      currentBlockTimestamp: Number(Number.MAX_SAFE_INTEGER),
     };
   }
 }

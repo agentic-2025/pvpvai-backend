@@ -155,3 +155,4 @@ export const pvpActionEnactedAiChatOutputSchema = authenticatedMessageSchema.ext
   }),
 });
 export type PvpActionEnactedAiChatOutputType = z.infer<typeof pvpActionEnactedAiChatOutputSchema>;
+export type AllPvpParametersType = PvpAllPvpActionsType['parameters'];

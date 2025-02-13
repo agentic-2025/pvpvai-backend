@@ -23,7 +23,7 @@ import { z } from 'zod';
 import { backendEthersSigningWallet, supabase, wsOps } from '../config';
 import { roundController } from '../controllers/roundController';
 import { applyPvp } from '../pvp';
-import { agentMessageInputSchema } from '../schemas/agentMessage';
+import { agentMessageAiChatOutputSchema, agentMessageInputSchema } from '../schemas/agentMessage';
 import {
   gmMessageAgentOutputSchema,
   gmMessageAiChatOutputSchema,
@@ -62,6 +62,16 @@ type ProcessMessageResponse = {
   statusCode: number;
   success?: boolean;
 };
+
+
+// Add this helper function near the top of the file
+function bigIntReplacer(key: string, value: any) {
+  // Convert BigInt to string when serializing
+  if (typeof value === 'bigint') {
+    return value.toString();
+  }
+  return value;
+}
 
 /**
  * NEW: Main function to check inactive agents in a round
@@ -330,14 +340,7 @@ export async function processAgentMessage(
     );
 
     console.log('PvP result:', pvpResult);
-
-    // If sender is silenced, return early
-    if (Object.keys(pvpResult.targetMessages).length === 0) {
-      return {
-        message: 'Message blocked - sender is silenced',
-        statusCode: 200,
-      };
-    }
+    console.log('PvP result targetMessages:', pvpResult.targetMessages);
 
     const backendSignature = await signMessage(message.content);
     const postPvpMessages = pvpResult.targetMessages;
@@ -384,12 +387,10 @@ export async function processAgentMessage(
               .map((a) => a.id),
             postPvpMessages,
             // pvpStatusEffects: pvpResult.appliedEffects,
-            pvpStatusEffects:
-              typeof round.pvp_status_effects === 'string'
-                ? JSON.parse(round.pvp_status_effects)
-                : round.pvp_status_effects || {},
+            pvpStatusEffects: pvpResult.pvpStatusEffects,
+            currentBlockTimestamp: Number(pvpResult.currentBlockTimestamp),
           },
-        },
+        } satisfies z.infer<typeof agentMessageAiChatOutputSchema>,
       },
     });
 

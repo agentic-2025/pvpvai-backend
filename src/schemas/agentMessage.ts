@@ -46,7 +46,13 @@ export const agentMessageAiChatOutputSchema = z.object({
     senderId: z.number(),
     originalMessage: agentMessageInputSchema,
     originalTargets: z.array(z.number()),
+    currentBlockTimestamp: z.number(),
     postPvpMessages: z.record(z.string(), agentMessageAgentOutputSchema),
-    pvpStatusEffects: z.record(z.string(), z.array(z.any())), //TODO replace with actual PvP status effect schema
+    pvpStatusEffects: z.record(z.string(), z.array(z.object({
+      verb: z.string(),
+      parameters: z.any(),
+      endTime: z.number(),
+      instigator: z.string(),
+    }))), //TODO replace with actual PvP status effect schema
   }),
 });
