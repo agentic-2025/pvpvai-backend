@@ -217,7 +217,7 @@ export async function startContractEventListener() {
     });
 
     contract.on(pvpActionInvokedFilter, async (eventPayload) => {
-      const [verbHash, targetAddress, endTime, parameters] = eventPayload.args;
+      const [contractRoundId, verbHash, targetAddress, endTime, parameters] = eventPayload.args;
       console.log('\n=== PvpActionInvoked Event Details ===');
 
       // Get transaction details to find the sender
@@ -250,6 +250,7 @@ export async function startContractEventListener() {
         return;
       }
 
+      console.log('room.id', room.id);
       const { data: round, error: roundError } = await supabase
         .from('rounds')
         .select('id, round_agents(*, agents(*))')
@@ -286,7 +287,8 @@ export async function startContractEventListener() {
           instigatorAddress: instigatorAddress,
           txHash: eventPayload.log.transactionHash,
           // toString() so postgres can handle it when calling JSON.stringify()
-          timestamp: endTime.toString(),
+          timestamp: Date.now(),
+          effectEndTime: Number(endTime),
           roomId: room.id,
           action: pvpAction,
         },

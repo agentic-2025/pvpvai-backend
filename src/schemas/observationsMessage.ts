@@ -100,20 +100,3 @@ export type ObservationMessage = z.infer<typeof observationMessageInputSchema>;
 // Only difference between input and output is that the output message will be signed by GM
 export const observationMessageAgentOutputSchema = observationMessageInputSchema; // Message sent to agents
 export const observationMessageAiChatOutputSchema = observationMessageInputSchema; // Message sent to player facing AI Chatexport interface ObservationWalletBalanceData {
-  walletBalances: {
-    [walletAddress: string]: {
-      nativeBalance: BigInt;
-      tokenBalances: { [tokenAddress: string]: BigInt; };
-    };
-  };
-export interface ObservationPriceData {
-  nativePrice: number;
-  tokenPrices: {
-    [tokenAddress: string]: {
-      source: string;
-      tokenPriceUsd: number;
-    };
-  };
-}
-}
-

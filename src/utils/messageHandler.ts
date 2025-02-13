@@ -276,13 +276,6 @@ export async function processAgentMessage(
       };
     }
 
-    // Add debug logging
-    console.log('Address comparison:', {
-      messageSender: message.sender,
-      agentWallet: senderAgent.wallet_address,
-      agentId: message.content.agentId,
-    });
-
     // Direct case-insensitive comparison
     // if (message.sender.toLowerCase() !== senderAgent.wallet_address.toLowerCase()) {
     //   return {
@@ -325,6 +318,8 @@ export async function processAgentMessage(
         .map((agent) => [agent.agent_id, agent.wallet_address as string]) || []
     );
 
+    console.log('agentAddresses being sent to applyPvp', agentAddresses);
+
     // Apply PvP effects to the message
     const pvpResult = await applyPvp(
       message,
@@ -345,7 +340,7 @@ export async function processAgentMessage(
     }
 
     const backendSignature = await signMessage(message.content);
-    const postPvpMessages: Record<number, any> = pvpResult.targetMessages;
+    const postPvpMessages = pvpResult.targetMessages;
 
     // Send processed messages to agents, with PvP modifications applied
     for (const agent of agents) {
