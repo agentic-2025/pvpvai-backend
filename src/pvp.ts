@@ -11,6 +11,9 @@
 // }
 // The other two types of PvP actions are Amnesia and Direct Attack. These actions are taken against a single agent and do not modify the message or target, so they are
 import { ethers } from 'ethers';
+import { z } from 'zod';
+import { ethersProvider } from './config';
+import { agentMessageInputSchema } from './schemas/agentMessage';
 import {
   attackActionSchema,
   deafenStatusSchema,
@@ -24,7 +27,6 @@ import { WsMessageTypes } from './schemas/wsServer';
 import { roomAbi } from './types/contract.types';
 import { Json } from './types/database.types';
 import { AllAgentChatMessageSchemaTypes } from './utils/schemas';
-
 /**
  * Defines the structure of PvP status data returned from the smart contract
  */
@@ -41,7 +43,8 @@ interface PvpStatus {
  */
 export interface PvPResult {
   originalMessage: AllAgentChatMessageSchemaTypes;
-  targetMessages: Record<number, AllAgentChatMessageSchemaTypes>;
+  // originalTargets: number[];
+  targetMessages: Record<number, z.infer<typeof agentMessageInputSchema>>;
   appliedEffects: PvpAllPvpActionsType[];
   pvpStatusEffects: Json;
 }
@@ -119,6 +122,7 @@ async function getPvpStatuses(contractAddress: string, agentAddress: string): Pr
     const provider = new ethers.JsonRpcProvider(process.env.BASE_SEPOLIA_RPC_URL);
     const contract = new ethers.Contract(contractAddress, roomAbi, provider);
     const statuses = await contract.getPvpStatuses(agentAddress);
+
     return statuses;
   } catch (error) {
     console.error('Error fetching PvP statuses:', error);
@@ -126,207 +130,231 @@ async function getPvpStatuses(contractAddress: string, agentAddress: string): Pr
   }
 }
 
-/**
- * Applies poison effect to message text while preserving structure
- */
-function applyPoisonEffect(
-  message: AgentMessage,
-  find: string,
-  replace: string,
-  caseSensitive: boolean
-): AgentMessage {
-  const regex = new RegExp(find, caseSensitive ? 'g' : 'gi');
 
-  return {
-    ...message,
-    content: {
-      timestamp: message.content.timestamp,
-      roomId: message.content.roomId,
-      roundId: message.content.roundId,
-      agentId: message.content.agentId,
-      text: message.content.text.replace(regex, replace),
-      context: message.content.context,
-    },
-  };
+
+// applySilenceEffect
+// If sender is silent, empty targetMessages
+function applySilenceEffect({
+  senderStatuses,
+  targetMessages,
+  currentBlockTimestamp,
+}: {
+  senderStatuses: PvpStatus[];
+  targetMessages: Record<number, z.infer<typeof agentMessageInputSchema>>;
+  currentBlockTimestamp: number;
+}): Record<number, z.infer<typeof agentMessageInputSchema>> {
+  const silenced = senderStatuses.find((status) => {
+    status.verb.toLowerCase() === 'silence' && status.endTime > currentBlockTimestamp;
+  });
+
+  if (silenced) {
+    console.log('sender is silent, empty targetMessages');
+    return {} as Record<number, z.infer<typeof agentMessageInputSchema>>;
+  }
+
+  return targetMessages;
+}
+
+// applyDeafenEffect
+// If a given target is deafened, remove them from targetMessages
+function applyDeafenEffect({
+  targetStatuses,
+  targetMessages,
+  currentBlockTimestamp,
+}: {
+  targetStatuses: Record<string, PvpStatus[]>;
+  targetMessages: Record<string, z.infer<typeof agentMessageInputSchema>>;
+  currentBlockTimestamp: number;
+}): Record<number, z.infer<typeof agentMessageInputSchema>> {
+  for (const targetId of Object.keys(targetMessages)) {
+    const targetStatus = targetStatuses[targetId];
+
+    const deaf = targetStatus.find((status) => {
+      status.verb.toLowerCase() === 'deafen' && status.endTime > currentBlockTimestamp;
+    });
+    if (deaf) {
+      console.log(`target ${targetId} is deaf, remove from targetMessages`);
+      delete targetMessages[targetId];
+    }
+  }
+  return targetMessages;
+}
+
+// applyPoisonEffect
+// If sender is poisoned, find and replace on every target message
+// Then check if each target is poisoned and apply the poison effect to their individual messages
+function applyPoisonEffect({
+  unmodifiedOriginalMessage,
+  senderStatuses,
+  targetStatuses,
+  targetMessages,
+  currentBlockTimestamp,
+  senderAddress,
+}: {
+  unmodifiedOriginalMessage: string;
+  senderStatuses: PvpStatus[];
+  targetStatuses: Record<string, PvpStatus[]>;
+  targetMessages: Record<string, z.infer<typeof agentMessageInputSchema>>;
+  currentBlockTimestamp: number;
+  senderAddress: string;
+}): Record<number, z.infer<typeof agentMessageInputSchema>> {
+  // First apply sender's poison if active
+  const senderPoisoned = senderStatuses.find(
+    (status) => status.verb.toLowerCase() === 'poison' && status.endTime > currentBlockTimestamp
+  );
+
+  if (senderPoisoned) {
+    console.log('sender is poisoned, find and replace on all target messages');
+    const params = decodeParameters(senderPoisoned.parameters, senderPoisoned.verb);
+    if (params?.find && params?.replace) {
+      // Apply poison to all target messages
+      Object.keys(targetMessages).forEach((targetId) => {
+        const message = targetMessages[targetId];
+        // Do the find and replace and check if the message was modified
+
+        targetMessages[targetId] = {
+          ...message,
+          content: {
+            ...message.content,
+            text: message.content.text.replace(
+              new RegExp(params.find, params.case_sensitive ? 'g' : 'gi'),
+              params.replace
+            ),
+          },
+        };
+        if (message.content.text !== unmodifiedOriginalMessage) {
+          console.log(`${targetId} message was modified by sender poison`);
+          console.log('original message', unmodifiedOriginalMessage);
+          console.log('modified message', message.content.text);
+        }
+      });
+
+      // Record the effect
+      const poisonEffect = poisonStatusSchema.parse({
+        actionType: PvpActions.POISON,
+        actionCategory: PvpActionCategories.STATUS_EFFECT,
+        parameters: {
+          target: senderAddress,
+          duration: senderPoisoned.endTime - currentBlockTimestamp,
+          find: params.find,
+          replace: params.replace,
+          case_sensitive: !!params.case_sensitive,
+        },
+      });
+    }
+  }
+
+  // Then apply each target's poison if active
+  for (const [targetId, message] of Object.entries(targetMessages)) {
+    const targetStatus = targetStatuses[targetId];
+    if (!targetStatus) continue;
+
+    const targetPoisoned = targetStatus.find(
+      (status) => status.verb.toLowerCase() === 'poison' && status.endTime > currentBlockTimestamp
+    );
+
+    if (targetPoisoned) {
+      const params = decodeParameters(targetPoisoned.parameters, targetPoisoned.verb);
+      if (params?.find && params?.replace) {
+        const prePoisonMessage = message.content.text;
+        // Apply poison to this target's message
+        targetMessages[targetId] = {
+          ...message,
+          content: {
+            ...message.content,
+            text: message.content.text.replace(
+              new RegExp(params.find, params.case_sensitive ? 'g' : 'gi'),
+              params.replace
+            ),
+          },
+        };
+        if (message.content.text !== prePoisonMessage) {
+          console.log(`${targetId} message was modified by target poison`);
+          console.log('original message', prePoisonMessage);
+          console.log('modified message', message.content.text);
+        }
+      }
+    }
+  }
+
+  return targetMessages;
 }
 
 /**
- * Updates PvP status effects in a type-safe way for database storage
- */
-function updatePvpStatusEffects(
-  currentEffects: Json,
-  address: string,
-  effect: PvpAllPvpActionsType
-): Json {
-  const effects = currentEffects as Record<string, PvpAllPvpActionsType[]>;
-  return {
-    ...effects,
-    [address]: [...(effects[address] || []), effect],
-  } as Json;
-}
-
-/**
- * Main PvP processing function
  * Takes an agent message and applies active PvP effects before delivery
  */
 export async function applyPvp(
-  message: AllAgentChatMessageSchemaTypes,
+  originalMessage: z.infer<typeof agentMessageInputSchema>,
   senderAgentId: number,
   targetAgentIds: number[],
   contractAddress: string,
   agentAddresses: Map<number, string>
 ): Promise<PvPResult> {
-  const result: PvPResult = {
-    originalMessage: message,
-    targetMessages: {},
-    appliedEffects: [],
-    pvpStatusEffects: {} as Json,
-  };
-
-  // Early return for non-agent messages
-  if (!isAgentMessage(message)) {
-    result.targetMessages = Object.fromEntries(targetAgentIds.map((id) => [id, message]));
-    return result;
-  }
+  console.log('applying PvP');
 
   try {
-    const now = Math.floor(Date.now() / 1000);
+    console.log('Applying PvP to message', originalMessage);
+
+    const result: PvPResult = {
+      originalMessage: originalMessage,
+      // originalTargets: targetAgentIds,
+      targetMessages: {},
+      appliedEffects: [],
+      pvpStatusEffects: {} as Json,
+    };
+
+    // Initialize targetMessages as a copy of source. If no PvP effects are applied, we will send the original message to all targets
+    result.targetMessages = Object.fromEntries(targetAgentIds.map((id) => [id, originalMessage]));
+
     const senderAddress = agentAddresses.get(senderAgentId);
     if (!senderAddress) {
       throw new Error(`No address found for agent ${senderAgentId}`);
     }
 
-    // Check sender's PvP status
-    const senderStatuses = await getPvpStatuses(contractAddress, senderAddress);
-
-    // Check if sender is silenced
-    const silenced = senderStatuses.find(
-      (status) => status.verb.toLowerCase() === 'silence' && status.endTime > now
-    );
-
-    if (silenced) {
-      const silenceEffect = silenceStatusSchema.parse({
-        actionType: PvpActions.SILENCE,
-        actionCategory: PvpActionCategories.STATUS_EFFECT,
-        parameters: {
-          target: senderAddress,
-          duration: silenced.endTime - now,
-        },
-      });
-      result.appliedEffects.push(silenceEffect);
-      result.pvpStatusEffects = {
-        [senderAddress]: [silenceEffect],
-      } as Json;
-      return result; // Silenced agents can't send messages
+    console.log('Fetching pvp status from the contract for', [...targetAgentIds, senderAgentId]);
+    const currentBlock = await ethersProvider.getBlock('latest');
+    if (!currentBlock) {
+      throw new Error('Failed to get current block, cannot apply PvP');
     }
-
-    // Apply sender's poison if active
-    let modifiedMessage = message;
-    const poisoned = senderStatuses.find(
-      (status) => status.verb.toLowerCase() === 'poison' && status.endTime > now
-    );
-
-    if (poisoned) {
-      const params = decodeParameters(poisoned.parameters, poisoned.verb);
-      if (params?.find && params?.replace) {
-        modifiedMessage = applyPoisonEffect(message, params.find, params.replace, false);
-
-        const poisonEffect = poisonStatusSchema.parse({
-          actionType: PvpActions.POISON,
-          actionCategory: PvpActionCategories.STATUS_EFFECT,
-          parameters: {
-            target: senderAddress,
-            duration: poisoned.endTime - now,
-            find: params.find,
-            replace: params.replace,
-            case_sensitive: !!params.case_sensitive, // align with frontend and use decoded value
-          },
-        });
-        result.appliedEffects.push(poisonEffect);
-        result.pvpStatusEffects = updatePvpStatusEffects(
-          result.pvpStatusEffects,
-          senderAddress,
-          poisonEffect
-        );
-      }
-    }
-
-    // Process each target's effects
-    for (const targetId of targetAgentIds) {
+    const currentBlockTimestamp = currentBlock.timestamp;
+    console.log('currentBlockTimestamp being used for PvP checks', currentBlockTimestamp);
+    const currentStatusesForAgentsById: Record<number, PvpStatus[]> = {};
+    for (const targetId of [...targetAgentIds, senderAgentId]) {
       const targetAddress = agentAddresses.get(targetId);
       if (!targetAddress) continue;
-
-      const targetStatuses = await getPvpStatuses(contractAddress, targetAddress);
-
-      // Skip deafened targets
-      const deafened = targetStatuses.find(
-        (status) => status.verb.toLowerCase() === 'deafen' && status.endTime > now
-      );
-
-      if (deafened) {
-        const deafenEffect = deafenStatusSchema.parse({
-          actionType: PvpActions.DEAFEN,
-          actionCategory: PvpActionCategories.STATUS_EFFECT,
-          parameters: {
-            target: targetAddress,
-            duration: deafened.endTime - now,
-          },
-        });
-        result.appliedEffects.push(deafenEffect);
-        result.pvpStatusEffects = updatePvpStatusEffects(
-          result.pvpStatusEffects,
-          targetAddress,
-          deafenEffect
-        );
-        continue; // Skip deafened target
-      }
-
-      // Apply target's poison if active
-      let targetMessage = modifiedMessage;
-      const targetPoisoned = targetStatuses.find(
-        (status) => status.verb.toLowerCase() === 'poison' && status.endTime > now
-      );
-
-      if (targetPoisoned) {
-        const params = decodeParameters(targetPoisoned.parameters, targetPoisoned.verb);
-        if (params?.find && params?.replace) {
-          targetMessage = applyPoisonEffect(
-            targetMessage,
-            params.find,
-            params.replace,
-            !!params.case_sensitive
-          );
-
-          const poisonEffect = poisonStatusSchema.parse({
-            actionType: PvpActions.POISON,
-            actionCategory: PvpActionCategories.STATUS_EFFECT,
-            parameters: {
-              target: targetAddress,
-              duration: targetPoisoned.endTime - now,
-              find: params.find,
-              replace: params.replace,
-              case_sensitive: !!params.case_sensitive,
-            },
-          });
-          result.appliedEffects.push(poisonEffect);
-          result.pvpStatusEffects = updatePvpStatusEffects(
-            result.pvpStatusEffects,
-            targetAddress,
-            poisonEffect
-          );
-        }
-      }
-
-      // Store modified message for this target
-      result.targetMessages[targetId] = targetMessage;
+      const statuses = await getPvpStatuses(contractAddress, targetAddress);
+      currentStatusesForAgentsById[targetId] = statuses;
     }
+
+    console.log('currentStatusesForAgentsById', currentStatusesForAgentsById);
+
+    result.targetMessages = applySilenceEffect({
+      senderStatuses: currentStatusesForAgentsById[senderAgentId],
+      targetMessages: result.targetMessages,
+      currentBlockTimestamp,
+    });
+
+    result.targetMessages = applyDeafenEffect({
+      targetStatuses: currentStatusesForAgentsById,
+      targetMessages: result.targetMessages,
+      currentBlockTimestamp,
+    });
+
+    result.targetMessages = applyPoisonEffect({
+      unmodifiedOriginalMessage: originalMessage.content.text,
+      senderStatuses: currentStatusesForAgentsById[senderAgentId],
+      targetStatuses: currentStatusesForAgentsById,
+      targetMessages: result.targetMessages,
+      currentBlockTimestamp,
+      senderAddress,
+    });
 
     return result;
   } catch (error) {
     console.error('Error applying PvP effects:', error);
     return {
-      originalMessage: message,
-      targetMessages: Object.fromEntries(targetAgentIds.map((id) => [id, message])),
+      originalMessage: originalMessage,
+      targetMessages: Object.fromEntries(targetAgentIds.map((id) => [id, originalMessage])),
       appliedEffects: [],
       pvpStatusEffects: {} as Json,
     };

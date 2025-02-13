@@ -144,6 +144,7 @@ export const pvpActionEnactedAiChatOutputSchema = authenticatedMessageSchema.ext
   messageType: z.literal(WsMessageTypes.PVP_ACTION_ENACTED),
   content: z.object({
     timestamp: z.number(),
+    effectEndTime: z.number(),
     roomId: z.number(),
     roundId: z.number(),
     instigator: z.string(),

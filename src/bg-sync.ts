@@ -12,59 +12,6 @@ import { processGmMessage } from './utils/messageHandler';
 import { wsServer } from './ws/server';
 
 const HARDCODED_GM_ID = 57;
-export async function syncAgentsWithActiveRounds() {
-  const { data: roundAgents, error } = await supabase
-    .from('round_agents')
-    .select('*, agents(*), rounds(rooms(*))')
-    .eq('rounds.active', true)
-    .eq('rounds.rooms.active', true);
-
-  if (error) {
-    console.error('Error fetching agents in active rounds:', error);
-    return;
-  }
-
-  const handledAgents = new Set<number>();
-  for (const roundAgent of roundAgents) {
-    try {
-      if (handledAgents.has(roundAgent.agents.id)) {
-        continue;
-      }
-      handledAgents.add(roundAgent.agents.id);
-      console.log('syncing agent', roundAgent.agents.id, 'at', roundAgent.agents.endpoint);
-      const roomId = roundAgent.rounds?.rooms?.id;
-      if (!roomId) {
-        // console.error('Room ID not found for round agent', roundAgent.id);
-        continue;
-      }
-      const roundId = roundAgent.round_id;
-      const url = new URL('forceRoundSync', roundAgent.agents.endpoint).toString();
-      const response = await axios.post(url, {
-        roomId,
-        roundId,
-      });
-      console.log('syncing agent response', response.data);
-    } catch (error) {
-      if (error instanceof AxiosError) {
-        console.error(
-          'Error syncing agent',
-          roundAgent.agents.id,
-          'at',
-          roundAgent.agents.endpoint,
-          error.response?.data
-        );
-      } else {
-        console.error(
-          'Error syncing agent',
-          roundAgent.agents.id,
-          'at',
-          roundAgent.agents.endpoint,
-          error
-        );
-      }
-    }
-  }
-}
 
 export async function checkAgentsForNudge() {
   const { data: roundAgents, error } = await supabase

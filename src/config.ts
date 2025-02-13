@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { JsonRpcProvider, Wallet } from 'ethers';
+import { ethers, JsonRpcProvider, Wallet } from 'ethers';
 import { type Address } from 'viem'; // keep this type if you want, or use string
 import { Database } from './types/database.types';
 import { GameContracts } from './utils/contractInteractions';
@@ -50,3 +50,5 @@ export let contractClient: GameContracts;
     coreAddress,
   });
 })();
+
+export const ethersProvider = new ethers.JsonRpcProvider(process.env.BASE_SEPOLIA_RPC_URL);
