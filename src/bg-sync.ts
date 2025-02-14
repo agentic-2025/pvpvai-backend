@@ -364,7 +364,7 @@ export async function closeRound(
     return;
   }
 
-  const receivedDecisions: Record<number, number> = {};
+  const receivedDecisions: Record<string, number> = {};
   for (const roundAgent of roundAgents2) {
     try {
       console.log('roundAgent.outcome', roundAgent.outcome);
@@ -378,7 +378,8 @@ export async function closeRound(
           .update({ outcome: { decision, fabricated: true } })
           .eq('id', roundAgent.id);
         outcome = { decision, fabricated: true };
-        receivedDecisions[roundAgent.id] = outcome.decision;
+        receivedDecisions[roundAgent.rounds.rooms.room_agents[0].agents.display_name] =
+          outcome.decision;
       }
 
       // 2 = processing
@@ -388,7 +389,8 @@ export async function closeRound(
       );
       const receipt = await tx.wait();
       console.log('agent decision receipt', receipt);
-      receivedDecisions[roundAgent.id] = outcome.decision;
+      receivedDecisions[roundAgent.rounds.rooms.room_agents[0].agents.display_name] =
+        outcome.decision;
       console.log('receivedDecisions', receivedDecisions);
     } catch (error) {
       await supabase
@@ -406,8 +408,8 @@ export async function closeRound(
     Agent decisions:
     ${Object.entries(receivedDecisions)
       .map(
-        ([agentId, decision]) =>
-          `Agent #${agentId}: ${decision === 1 ? 'BUY' : decision === 2 ? 'HOLD' : 'SELL'}`
+        ([agent_name, decision]) =>
+          `Agent #${agent_name}: ${decision === 1 ? 'BUY' : decision === 2 ? 'HOLD' : 'SELL'}`
       )
       .join('\n')}
     `,
