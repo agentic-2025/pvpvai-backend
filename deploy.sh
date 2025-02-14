@@ -1,8 +1,10 @@
 #!/bin/bash
 
 # Step 1: SCP everything that isn't in .gitignore and .git to the remote server
-rsync -avz --exclude-from='.gitignore' --exclude='.git' --include='.envrc.prod' --delete ./ root@pvpvai.com:/root/pvpvai-backend/
+rsync -avz --exclude-from='.gitignore' --exclude='.git' --include='.env' --delete ./ root@pvpvai.com:/root/pvpvai-backend/
 (cd ../pvpvai-eliza-starter && rsync -avz --exclude-from='.gitignore' --exclude='.git' --include='.env'  --delete ./ root@pvpvai.com:/root/pvpvai-eliza)
+scp .env root@pvpvai.com:/root/pvpvai-backend/.env
+(cd ../pvpvai-eliza-starter && scp .env root@pvpvai.com:/root/pvpvai-eliza/.env)
 
 #rsync -avz --exclude-from='.gitignore' --exclude='.git' --include='.envrc.prod' ./ root@88.99.99.179:/root/pvpvai-backend/
 #(cd ../pvpvai-eliza && rsync -avz --exclude-from='.gitignore' --exclude='.git' --include='.env.prod' ./ root@88.99.99.179:/root/pvpvai-eliza/)

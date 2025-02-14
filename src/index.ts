@@ -67,8 +67,8 @@ server.register(async function (fastify) {
 const start = async () => {
   try {
     const port = parseInt(process.env.PORT || '3000', 10);
-    await server.listen({ port });
-    console.log(`Server listening on http://localhost:${port}`);
+    await server.listen({ host: '0.0.0.0', port });
+    console.log(`Server listening on http://0.0.0.0:${port}`);
   } catch (err) {
     server.log.error(err);
     process.exit(1);
