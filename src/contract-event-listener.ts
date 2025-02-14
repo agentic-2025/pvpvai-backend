@@ -2,6 +2,7 @@
 import { ethers } from 'ethers';
 import { z } from 'zod';
 import { supabase, wsOps } from './config';
+import { agentMessageAgentOutputSchema } from './schemas/agentMessage';
 import {
   attackActionSchema,
   deafenStatusSchema,
@@ -15,22 +16,20 @@ import {
 import { WsMessageTypes } from './schemas/wsServer';
 import { roomAbi } from './types/contract.types';
 import { Database } from './types/database.types';
+import { sendMessageToAgent } from './utils/messageHandler';
 
 const HARDCODED_ROOM = 17;
-
 
 // Add a flag to track if we've already processed an event
 const processedEvents = new Set<string>();
 // Add this event to our processed set
-
-
 
 // Base Sepolia RPC URL (Use Alchemy, Infura, or Public RPC)
 
 // Error in createNewRound: Error: network does not support ENS (operation="getEnsAddress",
 export function getRoomContract(contractAddress: string) {
   const provider = new ethers.JsonRpcProvider(process.env.BASE_SEPOLIA_RPC_URL);
-  const wallet = new ethers.Wallet(process.env.PRIVATE_KEY!, provider);
+  const wallet = new ethers.Wallet(process.env.SIGNER_PRIVATE_KEY!, provider);
   return new ethers.Contract(contractAddress, roomAbi, wallet);
 }
 
@@ -76,7 +75,11 @@ function decodePvpInvokeParameters(verb: string, parametersHex: string): any {
   }
 }
 
-function getPvpActionFromVerb(verb: string, targetAddress: string, decodedParameters: any): PvpAllPvpActionsType {
+function getPvpActionFromVerb(
+  verb: string,
+  targetAddress: string,
+  decodedParameters: any
+): PvpAllPvpActionsType {
   switch (verb.toUpperCase()) {
     case PvpActions.ATTACK:
       return {
@@ -223,7 +226,6 @@ export async function startContractEventListener() {
       });
     });
 
-
     contract.on(pvpActionInvokedFilter, async (eventPayload) => {
       console.log('Transaction hash', eventPayload.log.transactionHash);
       if (processedEvents.has(eventPayload.log.transactionHash)) {
@@ -298,7 +300,7 @@ export async function startContractEventListener() {
 
       const pvpActionMessage = {
         messageType: WsMessageTypes.PVP_ACTION_ENACTED,
-        signature: 'signature',
+        signature: `PvP Action from ${instigatorAddress} - ${Date.now()}`,
         sender: targetAddress,
         content: {
           roundId: round.id,
@@ -323,6 +325,56 @@ export async function startContractEventListener() {
           pvp_status_effects: {}, // Our contract is the source of truth, this field is an artifact
         } satisfies Database['public']['Tables']['round_agent_messages']['Insert'],
       });
+
+      if (pvpAction.actionType === PvpActions.ATTACK) {
+        console.log(
+          `Enacting attack, will send the following DM to ${pvpAction.parameters.target}: ${pvpAction.parameters.message}`
+        );
+        console.log('target', pvpAction.parameters.target);
+
+        //TODO this query broken, just querying agents application wallet for demo
+        // const { data: agent, error: agentError } = await supabase
+        //   .from('agents')
+        //   .select('*, room_agents(*)')
+        //   .or(
+        //     `eth_wallet_address.eq.${pvpAction.parameters.target},room_agents.wallet_address.eq.${pvpAction.parameters.target}`
+        //   )
+        //   .eq('room_agents.room_id', room.id)
+        //   .single();
+
+        const { data: agent, error: agentError } = await supabase
+          .from('agents')
+          .select('*')
+          .eq('eth_wallet_address', pvpAction.parameters.target)
+          .single();
+
+        if (agentError) {
+          console.error('Error fetching agent:', agentError);
+          return;
+        }
+
+        if (!agent) {
+          console.error('No agent found for target:', pvpAction.parameters.target);
+          return;
+        }
+
+        console.log(`Agent with wallet address ${pvpAction.parameters.target} found: ${agent}`);
+
+        const message = {
+          messageType: WsMessageTypes.AGENT_MESSAGE,
+          signature: `PvP Attack from ${instigatorAddress} - ${Date.now()}`,
+          sender: targetAddress,
+          content: {
+            roundId: round.id,
+            text: pvpAction.parameters.message,
+            timestamp: Date.now(),
+            roomId: room.id,
+            agentId: 57,
+          },
+        } satisfies z.infer<typeof agentMessageAgentOutputSchema>;
+
+        await sendMessageToAgent({ agent, message });
+      }
     });
 
     // Log available events

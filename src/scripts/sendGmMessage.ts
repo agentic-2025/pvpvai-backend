@@ -1,9 +1,9 @@
 import axios from 'axios';
 import { Wallet } from 'ethers';
 import { z } from 'zod';
+import { gmMessageInputSchema } from '../schemas/gmMessage';
 import { WsMessageTypes } from '../schemas/wsServer';
-import { gmMessageInputSchema } from '../utils/schemas';
-import { sortObjectKeys } from '../utils/sortObjectKeys';
+import { sortObjectKeys } from '../utils/auth';
 
 const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3000';
 

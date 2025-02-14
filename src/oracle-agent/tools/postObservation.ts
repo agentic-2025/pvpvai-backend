@@ -2,7 +2,6 @@ import { customActionProvider, EvmWalletProvider } from '@coinbase/agentkit';
 import { hashMessage } from '@coinbase/coinbase-sdk';
 import axios from 'axios';
 import { z } from 'zod';
-import { observationMessageContentSchema } from '../../utils/schemas';
 
 // Define the prompt for the post observation action
 const POST_OBSERVATION_PROMPT = `
@@ -64,7 +63,7 @@ const PriceUpdateContent = z.object({
 const postObservationProvider = customActionProvider<EvmWalletProvider>({
   name: 'post_observation',
   description: POST_OBSERVATION_PROMPT,
-  schema: observationMessageContentSchema,
+  schema: z.object({}).passthrough(),
   invoke: async (wallet, args: any): Promise<string> => {
     try {
       const timestamp = Date.now();

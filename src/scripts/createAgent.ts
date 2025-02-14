@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { backendEthersSigningWallet } from '../config';
 import { signedAgentCreationSchema } from '../routes/agentRoutes';
 import { WsMessageTypes } from '../schemas/wsServer';
-import { sortObjectKeys } from '../utils/sortObjectKeys';
+import { sortObjectKeys } from '../utils/auth';
 
 async function createAgent() {
   try {

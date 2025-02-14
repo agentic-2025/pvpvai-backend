@@ -63,7 +63,6 @@ type ProcessMessageResponse = {
   success?: boolean;
 };
 
-
 // Add this helper function near the top of the file
 function bigIntReplacer(key: string, value: any) {
   // Convert BigInt to string when serializing
@@ -734,7 +733,7 @@ export async function sendMessageToAgent(params: {
         );
       }
     });
-    console.log('Message sent to agent', params.agent.id, 'endpoint', params.agent.endpoint);
+    console.log('Message sent to agent', params.agent.id, 'endpoint', endpointUrl.toString());
     // console.log('Response', response.data);
 
     return {

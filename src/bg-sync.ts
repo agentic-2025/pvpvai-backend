@@ -344,12 +344,12 @@ export async function closeRound(
   await sendGmMessage({
     roomId: round.room_id,
     roundId: round.id,
-    targets: agentIds,
+    targets: [],
     message: 'GM finished asking agents to submit their decision, waiting for responses...',
   });
 
   // wait 30 seconds for the agents to respond
-  await new Promise((resolve) => setTimeout(resolve, 15000));
+  await new Promise((resolve) => setTimeout(resolve, 10000));
   // await new Promise(resolve => setTimeout(resolve, 1000));
 
   // select all the round_agents that are not kicked
