@@ -22,7 +22,6 @@
  * - Database: Tracking last_message timestamps
  */
 
-import { roundController } from '../controllers/roundController';
 import { supabase } from '../config';
 
 export class AgentMonitorService {

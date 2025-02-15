@@ -1,16 +1,17 @@
-import { backendEthersSigningWallet, supabase } from './config';
-// import { roundService } from '../services/roundService';
 import axios, { AxiosError } from 'axios';
 import { z } from 'zod';
+import { backendEthersSigningWallet, supabase } from './config';
 import { getRoomContract } from './contract-event-listener';
-import { RoundState } from './rooms';
 import { gmMessageAiChatOutputSchema, gmMessageInputSchema } from './schemas/gmMessage';
 import { WsMessageTypes } from './schemas/wsServer';
 import { Database } from './types/database.types';
+import { RoundState } from './types/roomTypes';
 import { sortObjectKeys } from './utils/auth';
 import { processGmMessage } from './utils/messageHandler';
+import { gmInstructDecisionInputSchema } from './utils/schemas';
 import { wsServer } from './ws/server';
 
+// TODO fixme, hardcoding bad
 const HARDCODED_GM_ID = 57;
 const HARDCODED_ROOM_ID = 17;
 
@@ -36,7 +37,6 @@ export async function checkAgentsForNudge() {
       console.log('syncing agent', roundAgent.agents.id, 'at', roundAgent.agents.endpoint);
       const roomId = roundAgent.rounds?.rooms?.id;
       if (!roomId) {
-        // console.error('Room ID not found for round agent', roundAgent.id);
         continue;
       }
       const roundId = roundAgent.round_id;
@@ -122,10 +122,10 @@ export async function createNewRound(
       return;
     }
 
-    console.log('new round created', newRound);
+    // console.log('new round created', newRound);
     console.log(`calling contract ${room.contract_address} startRound`);
 
-    console.log('logged receipt for startRound', receipt);
+    // console.log('logged receipt for startRound', receipt);
     // update the round status to OPEN
     const { data: roundData, error: updateError } = await supabase
       .from('rounds')
@@ -133,7 +133,6 @@ export async function createNewRound(
       .eq('id', newRound.id)
       .single();
 
-    console.log('XXXroundData', roundData);
     if (updateError) {
       console.error('Error updating round:', updateError);
     }
@@ -141,7 +140,6 @@ export async function createNewRound(
       console.error('Round data not found for round', newRound.id);
       return;
     }
-    console.log('roundAgentsXXX', roundData.round_agents);
 
     // // Tell agents to get the latest round
     // for (const roundAgent of roundData.round_agents) {
@@ -309,35 +307,30 @@ export async function closeRound(
   await processGmMessage(message);
 
   for (const agent of agents) {
+    const url = `${agent.endpoint}/messages/gmInstructDecision`;
     // const url = new URL('messages/gmInstructDecision', agent.endpoint).toString();
-    // console.log('Telling agent #', agent.id, 'at', url, 'to submit their decision');
-    // axios
-    //   .post(url, {
-    //     messageType: WsMessageTypes.GM_INSTRUCT_DECISION,
-    //     sender: backendEthersSigningWallet.address,
-    //     signature: Date.now().toString(),
-    //     content: sortObjectKeys({
-    //       roomId: round.room_id,
-    //       roundId: round.id,
-    //     }),
-    //   } satisfies z.infer<typeof gmInstructDecisionInputSchema>)
-    //   .catch((error) => {
-    //     console.error(
-    //       'Error telling agent #',
-    //       agent.id,
-    //       'at',
-    //       url,
-    //       'to submit their decision:',
-    //       error
-    //     );
-    //   });
-    // console.log(
-    //   'Finished telling agent #',
-    //   agent.id,
-    //   'at',
-    //   agent.endpoint,
-    //   'to submit their decision'
-    // );
+    console.log('Telling agent #', agent.id, 'at', url, 'to submit their decision');
+    axios
+      .post(url, {
+        messageType: WsMessageTypes.GM_INSTRUCT_DECISION,
+        sender: backendEthersSigningWallet.address,
+        signature: Date.now().toString(),
+        content: sortObjectKeys({
+          roomId: round.room_id,
+          roundId: round.id,
+        }),
+      } satisfies z.infer<typeof gmInstructDecisionInputSchema>)
+      .catch((error) => {
+        console.error(
+          'Error telling agent #',
+          agent.id,
+          'at',
+          url,
+          'to submit their decision:',
+          error
+        );
+      });
+    console.log('Finished telling agent #', agent.id, 'at', url, 'to submit their decision');
   }
 
   // Just sends a gm message to ai chat to tell them what's happen
@@ -349,7 +342,7 @@ export async function closeRound(
   });
 
   // wait 30 seconds for the agents to respond
-  await new Promise((resolve) => setTimeout(resolve, 10000));
+  // await new Promise((resolve) => setTimeout(resolve, 10000));
   // await new Promise(resolve => setTimeout(resolve, 1000));
 
   // select all the round_agents that are not kicked
@@ -376,9 +369,9 @@ export async function closeRound(
         await supabase
           .from('round_agents')
           .update({ outcome: { decision, fabricated: true } })
-          .eq('id', roundAgent.id);
+          .eq('agent_id', roundAgent.agent_id);
         outcome = { decision, fabricated: true };
-        receivedDecisions[roundAgent.id] = outcome.decision;
+        receivedDecisions[roundAgent.agent_id] = outcome.decision;
       }
 
       // 2 = processing
@@ -388,13 +381,13 @@ export async function closeRound(
       );
       const receipt = await tx.wait();
       console.log('agent decision receipt', receipt);
-      receivedDecisions[roundAgent.id] = outcome.decision;
+      receivedDecisions[roundAgent.agent_id] = outcome.decision;
       console.log('receivedDecisions', receivedDecisions);
     } catch (error) {
       await supabase
         .from('round_agents')
         .update({ outcome: { decision: Math.floor(Math.random() * 3) + 1 } })
-        .eq('id', roundAgent.id);
+        .eq('id', roundAgent.agent_id);
     }
   }
 
@@ -402,14 +395,6 @@ export async function closeRound(
 
   const content2 = {
     message: `Round #${round.id} complete, you can withdraw your funds.
-
-    Agent decisions:
-    ${Object.entries(receivedDecisions)
-      .map(
-        ([agentId, decision]) =>
-          `Agent #${agentId}: ${decision === 1 ? 'BUY' : decision === 2 ? 'HOLD' : 'SELL'}`
-      )
-      .join('\n')}
     `,
     roundId: round.id,
     gmId: HARDCODED_GM_ID,

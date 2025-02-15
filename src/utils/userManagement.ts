@@ -1,3 +1,4 @@
+// TODO this is on the chopping block, we're thinking about getting rid of user profiles for the scroll MVP
 import { supabase } from '../config';
 import { Database } from '../types/database.types';
 

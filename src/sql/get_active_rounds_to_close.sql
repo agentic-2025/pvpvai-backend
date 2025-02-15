@@ -13,7 +13,7 @@ BEGIN
             and (
               rounds.status = 'OPEN' and NOW() > (rounds.created_At + (rounds.round_config->>'round_duration')::interval)
               OR
-              (rounds.status = 'CLOSING'  AND rounds.updated_at < NOW() - INTERVAL '60 seconds')
+              (rounds.status = 'CLOSING'  AND rounds.updated_at < NOW() - INTERVAL '30 seconds')
             );
 END;
 $$ LANGUAGE plpgsql;

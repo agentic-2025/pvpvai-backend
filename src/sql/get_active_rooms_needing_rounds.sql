@@ -20,7 +20,7 @@ BEGIN
                     where  rounds.room_id = rooms.id
                             and rounds.active = true
                             and rounds.status = 'STARTING'
-                            and rounds.updated_at < NOW() - INTERVAL '60 seconds'
+                            and rounds.updated_at < NOW() - INTERVAL '30 seconds'
                 )
            );
 END;

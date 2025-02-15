@@ -1,19 +1,7 @@
-//TODO Implement this. Takes an AI Chat Message and target agents, and tweaks the message + targets based on the currently active PvP modifiers
-// Agents can be afflicted with multiple PvP modifiers at once, so unless explicity specified, all modifiers should be applied
-// Remember that only AI messages should be processed by this function. GM messages must always be sent to agents unaltered to keep things running.
-// X Silenced: If the source agent is silenced, do not send the message to any targets, the source agent is not allowed to send messages
-// X Target Defeaned:  If a target agent is deafened, remove the target from the message targets. A deafened agent cannot hear messages
-// X Poisoned: If a source agent is poisoned, then apply a find and replace to the outgoing message. Return "altered" as true at the end (the AI Agents won't be informed that the message was altered, but we will inform the players to render the effect in the UI)
-// export const applyPvp = (message: AiChatMessage, targets: Agent[]): (AiChatMessage, altered) =>
-// 1. Fetch PvP statuses for all agents
-// 2. Apply Silence, Deafen, Poison, etc.
-// 3. Return the altered AI Chat message and a boolean indicating if the content was altered (altered = true if any PvP modifiers modified the message, the only condition that does this for now is Poison)
-// }
-// The other two types of PvP actions are Amnesia and Direct Attack. These actions are taken against a single agent and do not modify the message or target, so they are
 import { ethers } from 'ethers';
 import { z } from 'zod';
-import { ethersProvider } from './config';
-import { agentMessageAiChatOutputSchema, agentMessageInputSchema } from './schemas/agentMessage';
+import { ethersProvider } from '../config';
+import { agentMessageAiChatOutputSchema, agentMessageInputSchema } from '../schemas/agentMessage';
 import {
   AllPvpParametersType,
   attackActionSchema,
@@ -22,10 +10,10 @@ import {
   PvpActions,
   PvpAllPvpActionsType,
   silenceStatusSchema,
-} from './schemas/pvp';
-import { WsMessageTypes } from './schemas/wsServer';
-import { roomAbi } from './types/contract.types';
-import { AllAgentChatMessageSchemaTypes } from './utils/schemas';
+} from '../schemas/pvp';
+import { WsMessageTypes } from '../schemas/wsServer';
+import { roomAbi } from '../types/contract.types';
+import { AllAgentChatMessageSchemaTypes } from './schemas';
 /**
  * Defines the structure of PvP status data returned from the smart contract
  */
@@ -108,7 +96,6 @@ async function getPvpStatuses(contractAddress: string, agentAddress: string): Pr
     const provider = new ethers.JsonRpcProvider(process.env.BASE_SEPOLIA_RPC_URL);
     const contract = new ethers.Contract(contractAddress, roomAbi, provider);
     const statuses = await contract.getPvpStatuses(agentAddress);
-    console.log('statuses', statuses);
 
     const parsedStatuses = statuses.map((status: any) => {
       //TODO can safe parse here
@@ -116,7 +103,6 @@ async function getPvpStatuses(contractAddress: string, agentAddress: string): Pr
       const endTime = Number(status.endTime);
       const parameters = decodeParameters(status.parameters, verb);
       const instigator = status.instigator;
-      console.log('parameters', parameters);
       return { verb, endTime, parameters, instigator };
     });
 
@@ -167,8 +153,6 @@ function applyDeafenEffect({
 }): Record<number, z.infer<typeof agentMessageInputSchema>> {
   for (const targetId of Object.keys(targetMessages)) {
     const targetStatus = targetStatuses[targetId];
-    console.log('targetStatus', targetStatus);
-    console.log('currentBlockTimestamp', currentBlockTimestamp);
     const deaf = targetStatus.find((status) => {
       return status.verb.toLowerCase() === 'deafen' && status.endTime > currentBlockTimestamp;
     });
@@ -269,7 +253,6 @@ function applyPoisonEffect({
             ),
           },
         };
-        console.log('post poison message', message.content.text);
         if (message.content.text !== prePoisonMessage) {
           console.log(`${targetId} message was modified by target poison`);
           console.log('original message', prePoisonMessage);
@@ -295,7 +278,7 @@ export async function applyPvp(
   console.log('applying PvP');
 
   try {
-    console.log('Applying PvP to message', originalMessage);
+    // console.log('Applying PvP to message', originalMessage);
 
     const result: PvPResult = {
       originalMessage: originalMessage,
@@ -314,7 +297,7 @@ export async function applyPvp(
       throw new Error(`No address found for agent ${senderAgentId}`);
     }
 
-    console.log('Fetching pvp status from the contract for', [...targetAgentIds, senderAgentId]);
+    // console.log('Fetching pvp status from the contract for', [...targetAgentIds, senderAgentId]);
     const currentBlock = await ethersProvider.getBlock('latest');
     if (!currentBlock) {
       throw new Error('Failed to get current block, cannot apply PvP');
@@ -322,7 +305,7 @@ export async function applyPvp(
     const currentBlockTimestamp = Number(currentBlock.timestamp);
     result.currentBlockTimestamp = currentBlockTimestamp;
 
-    console.log('currentBlockTimestamp being used for PvP checks', currentBlockTimestamp);
+    // console.log('currentBlockTimestamp being used for PvP checks', currentBlockTimestamp);
     const currentStatusesForAgentsById: Record<number, PvpStatus[]> = {};
     for (const targetId of [...targetAgentIds, senderAgentId]) {
       const targetAddress = agentAddresses.get(targetId);
@@ -330,7 +313,6 @@ export async function applyPvp(
       currentStatusesForAgentsById[targetId] = await getPvpStatuses(contractAddress, targetAddress);
     }
     result.pvpStatusEffects = currentStatusesForAgentsById;
-    console.log('currentStatusesForAgentsById', currentStatusesForAgentsById);
 
     result.targetMessages = applySilenceEffect({
       senderStatuses: currentStatusesForAgentsById[senderAgentId],

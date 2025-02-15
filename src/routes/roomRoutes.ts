@@ -2,12 +2,9 @@ import { ethers } from 'ethers';
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { contractClient, supabase } from '../config';
-import { roomController } from '../controllers/roomController';
+import { roomService } from '../services/roomService';
 import { agentAddSchema, agentBulkAddSchema, roomSetupSchema } from '../utils/schemas';
 import { chainIdToNetwork, createAndSaveWalletToFile } from '../utils/walletUtils';
-
-
-
 
 export async function roomRoutes(server: FastifyInstance) {
   // Setup new room
@@ -111,7 +108,7 @@ export async function roomRoutes(server: FastifyInstance) {
     },
     async (request, reply) => {
       const roomId = parseInt(request.params.roomId);
-      const result = await roomController.addAgentToRoom(
+      const result = await roomService.addAgentToRoom(
         roomId,
         request.body.agent_id,
         request.body.wallet_address,
@@ -144,7 +141,7 @@ export async function roomRoutes(server: FastifyInstance) {
     },
     async (request, reply) => {
       const roomId = parseInt(request.params.roomId);
-      const result = await roomController.bulkAddAgentsToRoom(roomId, request.body.agents);
+      const result = await roomService.bulkAddAgentsToRoom(roomId, request.body.agents);
       if (!result.success) {
         return reply.status(400).send({ error: result.error });
       }
@@ -170,7 +167,7 @@ export async function roomRoutes(server: FastifyInstance) {
     },
     async (request, reply) => {
       const roomId = parseInt(request.params.roomId);
-      const result = await roomController.findRoomById(roomId);
+      const result = await roomService.findRoomById(roomId);
 
       if (!result.success) {
         return reply.status(404).send({ error: result.error });
@@ -203,7 +200,7 @@ export async function roomRoutes(server: FastifyInstance) {
       const roomId = parseInt(request.params.roomId);
 
       // First verify room exists
-      const roomResult = await roomController.findRoomById(roomId);
+      const roomResult = await roomService.findRoomById(roomId);
       if (!roomResult.success) {
         return reply.status(404).send({ error: 'Room not found' });
       }

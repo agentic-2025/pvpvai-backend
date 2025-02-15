@@ -2,65 +2,74 @@ import { PostgrestError } from '@supabase/supabase-js';
 import { supabase } from '../config';
 import { Database, Tables } from '../types/database.types';
 import { RoomOperationResult } from '../types/roomTypes';
+import { processInactiveAgents } from '../utils/messageHandler';
 
 export class RoundService {
-  // async storeRoundAgentMessage({
-  //   record,
-  // }: {
-  //   record: Database['public']['Tables']['round_agent_messages']['Insert'];
-  // }): Promise<RoomOperationResult<RoundMessage>> {
-  //   try {
-  //     console.log('record on storeRoundAgentMessage', record);
 
-  //     const { data: storedMessage, error } = await supabase
-  //       .from('round_agent_messages')
-  //       .insert(record)
-  //       .select('*, agents!round_agent_messages_agent_id_fkey(display_name, character_card)') // Specify the foreign key relationship
-  //       .single();
+  async recordAgentDecision(
+    roundId: number,
+    agentId: number,
+    decision: 1 | 2 | 3
+  ): Promise<{ success: boolean; error?: string; statusCode: number }> {
+    try {
+      console.log(
+        'recordAgentDecision, logging agent decision roundId',
+        roundId,
+        'agentId',
+        agentId,
+        'decision',
+        decision
+      );
+      // Verify round is in CLOSING phase
+      const { data: round } = await supabase
+        .from('rounds')
+        .select('status')
+        .eq('id', roundId)
+        .single();
 
-  //     if (error) {
-  //       return { success: false, error: error.message };
-  //     }
+      // if (round?.status !== 'CLOSING') {
+      //   return {
+      //     success: false,
+      //     error: 'Trading decisions can only be made during round closing phase',
+      //     statusCode: 400
+      //   };
+      // }
 
-  //     return { success: true, data: storedMessage };
-  //   } catch (err) {
-  //     console.error('Error storing round message:', err);
-  //     return { success: false, error: 'Failed to store round message' };
-  //   }
-  // }
+      // Record decision with timestamp
+      const { error } = await supabase
+        .from('round_agents')
+        .update({
+          outcome: {
+            decision,
+            timestamp: Date.now(),
+          },
+        })
+        .eq('round_id', roundId)
+        .eq('agent_id', agentId);
 
-  // async storeRoundUserMessage({
-  //   record,
-  // }: {
-  //   record: Database['public']['Tables']['round_user_messages']['Insert'];
-  // }): Promise<RoomOperationResult<RoundMessage>> {
-  //   try {
-  //     console.log('record on storeRoundUserMessage', record);
+      if (error) {
+        console.error('Error recording agent decision:', error);
+        return {
+          success: false,
+          error: error.message,
+          statusCode: 500,
+        };
+      }
 
-  //     const { data: storedMessage, error } = await supabase
-  //       .from('round_user_messages')
-  //       .insert(record)
-  //       .select('*, users!round_user_messages_user_id_fkey(display_name)') // Specify the foreign key relationship
-  //       .single();
+      return {
+        success: true,
+        statusCode: 200,
+      };
+    } catch (error) {
+      console.error('Error recording agent decision (outer):', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        statusCode: 500,
+      };
+    }
+  }
 
-  //     if (error) {
-  //       return { success: false, error: error.message };
-  //     }
-
-  //     return { success: true, data: storedMessage };
-  //   } catch (err) {
-  //     console.error('Error storing round message:', err);
-  //     return { success: false, error: 'Failed to store round message' };
-  //   }
-  // }
-
-  // private async deactivateRoomRounds(roomId: number): Promise<void> {
-  //   const { error } = await supabase.from('rounds').update({ active: false }).eq('room_id', roomId);
-
-  //   if (error) throw error;
-  // }
-
-  
   async kickParticipant(roundId: number, agentId: number): Promise<RoomOperationResult<void>> {
     try {
       const kickData: Database['public']['Tables']['round_agents']['Update'] = {
@@ -101,6 +110,17 @@ export class RoundService {
     const { data, error } = await supabase.from('round_agents').select('*').eq('round_id', roundId);
     return { data, error };
   }
+
+  async checkInactiveAgents(roomId: number): Promise<void> {
+    try {
+      // Delegate to message handler for actual message checks and notifications
+      await processInactiveAgents(roomId);
+    } catch (error) {
+      console.error('Error initiating inactive agent check:', error);
+    }
+  }
+
+
 }
 
 export const roundService = new RoundService();

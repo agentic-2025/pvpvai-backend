@@ -1,6 +1,6 @@
 import { RoomService } from '../services/roomService';
-import { Database } from '../types/database.types';
-import { DBRoomAgent, RoomOperationResult } from '../types/roomTypes';
+import { Tables } from '../types/database.types';
+import { RoomOperationResult } from '../types/roomTypes';
 
 // Initialize service instance
 const roomService = new RoomService();
@@ -74,13 +74,12 @@ export class RoomController {
   //   }
   // }
 
-
   async addAgentToRoom(
     roomId: number,
     agentId: number,
     walletAddress: string,
     endpoint?: string // Make endpoint optional
-  ): Promise<RoomOperationResult<DBRoomAgent>> {
+  ): Promise<RoomOperationResult<Tables<'room_agents'>>> {
     // Validate room exists and is active
     const roomResult = await roomService.findRoomById(roomId);
     if (!roomResult.success || !roomResult.data) {
@@ -95,12 +94,10 @@ export class RoomController {
     return await roomService.addAgentToRoom(roomId, agentId, walletAddress, endpoint);
   }
 
-
-
   async bulkAddAgentsToRoom(
     roomId: number,
     agents: Array<{ id: number; walletAddress: string }>
-  ): Promise<RoomOperationResult<DBRoomAgent[]>> {
+  ): Promise<RoomOperationResult<Tables<'room_agents'>[]>> {
     // Validate room exists and is active
     const roomResult = await roomService.findRoomById(roomId);
     if (!roomResult.success || !roomResult.data) {
@@ -119,7 +116,7 @@ export class RoomController {
     agentId: number,
     walletAddress: string,
     endpoint?: string
-  ): Promise<RoomOperationResult<DBRoomAgent>> {
+  ): Promise<RoomOperationResult<Tables<'room_agents'>>> {
     // Validate room exists and is active
     const roomResult = await roomService.findRoomById(roomId);
     if (!roomResult.success || !roomResult.data) {
@@ -146,12 +143,7 @@ export class RoomController {
     return updateResult;
   }
 
-  // Add findRoomById method to match RoomService
-  async findRoomById(
-    roomId: number
-  ): Promise<RoomOperationResult<Database['public']['Tables']['rooms']['Row']>> {
-    return await roomService.findRoomById(roomId);
-  }
+
 }
 
 export const roomController = new RoomController();

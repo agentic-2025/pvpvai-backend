@@ -21,8 +21,6 @@
 import axios, { AxiosError } from 'axios';
 import { z } from 'zod';
 import { backendEthersSigningWallet, supabase, wsOps } from '../config';
-import { roundController } from '../controllers/roundController';
-import { applyPvp } from '../pvp';
 import { agentMessageAiChatOutputSchema, agentMessageInputSchema } from '../schemas/agentMessage';
 import {
   gmMessageAgentOutputSchema,
@@ -38,6 +36,7 @@ import { roomService } from '../services/roomService';
 import { roundService } from '../services/roundService';
 import { Database, Tables } from '../types/database.types';
 import { signMessage } from './auth';
+import { applyPvp } from './pvp';
 import { AllAgentChatMessageSchemaTypes } from './schemas';
 import { roundAndAgentsPreflight } from './validation';
 
@@ -338,8 +337,8 @@ export async function processAgentMessage(
       agentAddresses
     );
 
-    console.log('PvP result:', pvpResult);
-    console.log('PvP result targetMessages:', pvpResult.targetMessages);
+    // console.log('PvP result:', pvpResult);
+    // console.log('PvP result targetMessages:w', pvpResult.targetMessages);
 
     const backendSignature = await signMessage(message.content);
     const postPvpMessages = pvpResult.targetMessages;
@@ -693,13 +692,13 @@ export async function sendMessageToAgent(params: {
     let pathSuffix = '';
     switch (params.message.messageType) {
       case WsMessageTypes.AGENT_MESSAGE:
-        pathSuffix = '/messages/receiveAgentMessage';
+        pathSuffix = 'messages/receiveAgentMessage';
         break;
       case WsMessageTypes.GM_MESSAGE:
-        pathSuffix = '/messages/receiveGmMessage';
+        pathSuffix = 'messages/receiveGmMessage';
         break;
       case WsMessageTypes.OBSERVATION:
-        pathSuffix = '/messages/receiveObservation';
+        pathSuffix = 'messages/receiveObservation';
         break;
       default:
         return {
@@ -708,14 +707,13 @@ export async function sendMessageToAgent(params: {
         };
     }
 
-    console.log('Sending message to agent at', endpoint, pathSuffix);
-
     // Ensure endpoint has /message path
-    let endpointUrl = new URL(pathSuffix, endpoint);
+    let endpointUrl = `${endpoint}/${pathSuffix}`;
+    // let endpointUrl = new URL(pathSuffix, endpoint);
     // if (!endpointUrl.pathname.endsWith('/message')) {
     //   endpointUrl = new URL('/message', endpointUrl);
     // }
-    console.log('Sending message to agent at', endpointUrl.toString());
+    console.log(`Sending message to agent ${params.agent.id} at ${endpointUrl.toString()}`);
 
     // Send request
     //TODO support sending over WS
@@ -723,12 +721,12 @@ export async function sendMessageToAgent(params: {
     axios.post(endpointUrl.toString(), params.message).catch((err) => {
       if (err instanceof AxiosError) {
         console.error(
-          `Error sending message to agent ${params.agent.id} at ${params.agent.endpoint} (catch block, axios):`,
+          `Error sending message to agent ${params.agent.id} at ${endpointUrl.toString()} (catch block, axios):`,
           err.response?.data
         );
       } else {
         console.error(
-          `Error sending message to agent ${params.agent.id} at ${params.agent.endpoint} (catch block):`,
+          `Error sending message to agent ${params.agent.id} at ${endpointUrl.toString()} (catch block):`,
           err
         );
       }
@@ -772,7 +770,7 @@ export async function processDecisionMessage(message: {
     const { signature, sender, content } = message;
     console.log('Received agent decision', message);
 
-    const result = await roundController.recordAgentDecision(
+    const result = await roundService.recordAgentDecision(
       content.roundId,
       content.agentId,
       content.decision

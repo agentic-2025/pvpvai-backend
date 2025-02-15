@@ -5,13 +5,13 @@ import fastify from 'fastify';
 import { checkAndCloseRounds, checkAndCreateRounds } from './bg-sync';
 import { supabase } from './config';
 import { startContractEventListener } from './contract-event-listener';
-import { roundController } from './controllers/roundController';
 import { signatureVerificationPlugin } from './middleware/signatureVerification';
 import zodSchemaPlugin from './plugins/zodSchema';
-import roomsRoutes from './rooms';
 import { agentRoutes } from './routes/agentRoutes';
 import { messagesRoutes } from './routes/messageRoutes';
+import { roomRoutes } from './routes/roomRoutes';
 import { roundRoutes } from './routes/roundRoutes';
+import { roundService } from './services/roundService';
 import { setupWebSocketServer } from './ws/server';
 // Add type declaration for the custom property
 declare module 'fastify' {
@@ -55,10 +55,10 @@ server.register(async function (fastify) {
   );
 
   // Fix: Update route registration to avoid conflicts
-  fastify.register(roomsRoutes, { prefix: '/rooms' }); // Handles /rooms/
-  fastify.register(agentRoutes, { prefix: '/agents' }); // Handles /agents/
-  fastify.register(messagesRoutes, { prefix: '/messages' }); // Handles /messages/
-  fastify.register(roundRoutes, { prefix: '/rooms/:roomId/rounds' }); // Handles /rooms/:roomId/rounds/*
+  fastify.register(roomRoutes, { prefix: '/rooms' });
+  fastify.register(agentRoutes, { prefix: '/agents' });
+  fastify.register(messagesRoutes, { prefix: '/messages' });
+  fastify.register(roundRoutes, { prefix: '/rooms/:roomId/rounds' });
 });
 
 // Register WebSocket handler
@@ -78,7 +78,7 @@ const start = async () => {
 start();
 startContractEventListener();
 
-const job = new CronJob('*/5 * * * * *', checkAndCreateRounds);
+const job = new CronJob('*/20 * * * * *', checkAndCreateRounds);
 job.start();
 const job2 = new CronJob('*/10 * * * * *', checkAndCloseRounds);
 job2.start();
@@ -108,7 +108,7 @@ const agentMonitorService = async () => {
       // 1. Verifies round is still active
       // 2. Calls messageHandler.processInactiveAgents
       // 3. Handles notification delivery
-      await roundController.checkInactiveAgents(room.id);
+      await roundService.checkInactiveAgents(room.id);
     }
   } catch (error) {
     console.error('Error in agent monitor service:', error);

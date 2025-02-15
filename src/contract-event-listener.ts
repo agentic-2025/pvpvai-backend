@@ -199,9 +199,6 @@ export async function startContractEventListener() {
     const roundStartedFilter = contract.filters.RoundStarted();
     const roundStateUpdatedFilter = contract.filters.RoundStateUpdated();
     const pvpActionInvokedFilter = contract.filters.PvpActionInvoked();
-    console.log('roundStartedFilter', roundStartedFilter);
-    console.log('roundStateUpdatedFilter', roundStateUpdatedFilter);
-    console.log('pvpActionInvokedFilter', pvpActionInvokedFilter);
     // Listen using filters
     contract.on(roundStartedFilter, async (eventPayload) => {
       // The args array contains the decoded parameters in order
@@ -276,6 +273,7 @@ export async function startContractEventListener() {
         .select('id, round_agents(*, agents(*))')
         .eq('room_id', room.id)
         .eq('status', 'OPEN')
+        .eq('active', true)
         .single();
 
       if (roundError) {

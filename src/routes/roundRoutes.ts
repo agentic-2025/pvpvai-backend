@@ -12,7 +12,7 @@
  * - Effect removal requires valid effectId
  */
 import { FastifyInstance } from 'fastify';
-import { roundController } from '../controllers/roundController';
+import { roundService } from '../services/roundService';
 import { KickParticipant, kickParticipantSchema } from '../utils/schemas';
 
 export async function roundRoutes(server: FastifyInstance) {
@@ -39,7 +39,7 @@ export async function roundRoutes(server: FastifyInstance) {
     },
     async (request, reply) => {
       const roundId = parseInt(request.params.roundId);
-      const result = await roundController.kickParticipant(roundId, request.body.agentId);
+      const result = await roundService.kickParticipant(roundId, request.body.agentId);
 
       if (!result.success) {
         return reply.status(400).send({ success: false, error: result.error });

@@ -1,3 +1,5 @@
+//TODO This is on the chopping block, not well integrated with the rest of the code base
+
 import { type JsonRpcProvider, type Wallet, Contract, ethers } from 'ethers';
 import { type Address } from 'viem'; // keep this type if you want, or use string
 import RoomArtifact from '../artifacts/Room.json';
