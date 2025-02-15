@@ -357,7 +357,7 @@ export async function closeRound(
     return;
   }
 
-  const receivedDecisions: Record<number, number> = {};
+  const receivedDecisions: Record<string, number> = {};
   for (const roundAgent of roundAgents2) {
     try {
       console.log('roundAgent.outcome', roundAgent.outcome);
